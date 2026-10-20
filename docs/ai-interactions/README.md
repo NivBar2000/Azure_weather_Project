@@ -18,3 +18,4 @@ Implementation results are reviewed by a human before approval. Follow-up correc
 - [010 - Authentication Foundation](./010-authentication-foundation.md)
 - [011 - Saved Forecast History](./011-saved-forecast-history.md)
 - [012 - Azure Terraform Foundation](./012-azure-terraform-foundation.md)
+- [013 - Azure Deployment Readiness](./013-azure-deployment-readiness.md)

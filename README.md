@@ -104,7 +104,7 @@ The local Nginx and PostgreSQL containers are development and integration-test i
 
 The reviewable Terraform root module under `infra/terraform` represents the approved Sweden Central production architecture. It defines Front Door Standard, Storage Static Website, a managed-identity App Service/ACR path, private zone-redundant PostgreSQL, Key Vault, networking, autoscale, and monitoring. It reads an existing resource group and does not manage Entra External ID.
 
-No Azure resource has been provisioned by Interaction 012. See [Azure infrastructure](docs/azure-infrastructure.md) for topology, security and cost decisions, manual prerequisites, deployment order, and limitations. See the [Terraform README](infra/terraform/README.md) for safe placeholders and local validation.
+No Azure resource has been provisioned. See [Azure infrastructure](docs/azure-infrastructure.md) for topology and security/cost decisions, [Azure deployment readiness](docs/azure-deployment-readiness.md) for the controlled future runbook and approval gates, and the [Terraform README](infra/terraform/README.md) for safe placeholders and local validation.
 
 Safe non-deploying validation:
 
