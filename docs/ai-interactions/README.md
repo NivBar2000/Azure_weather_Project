@@ -7,3 +7,4 @@ Implementation results are reviewed by a human before approval. Follow-up correc
 ## Index
 
 - [001 - Project Foundation](./001-project-foundation.md)
+- [002 - Foundation Review Fixes](./002-foundation-review-fixes.md)

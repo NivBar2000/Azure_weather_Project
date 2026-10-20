@@ -5,10 +5,15 @@ node_modules/
 dist/
 coverage/
 
-# Local environment files (examples are safe to commit)
+# Local environment files at any repository level
 .env
-.env.local
-.env.*.local
+.env.*
+**/.env
+**/.env.*
+
+# Environment templates are safe to commit
+!.env.example
+!**/.env.example
 
 # Logs
 *.log
