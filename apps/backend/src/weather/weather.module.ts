@@ -15,6 +15,6 @@ import { WeatherService } from "./weather.service";
       useValue: fetch,
     },
   ],
-  exports: [OpenWeatherClient],
+  exports: [OpenWeatherClient, WeatherService],
 })
 export class WeatherModule {}

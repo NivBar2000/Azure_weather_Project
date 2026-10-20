@@ -3,6 +3,7 @@ import { getDataSourceToken } from "@nestjs/typeorm";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { EntraTokenService } from "../src/auth/entra-token.service";
 import { OpenWeatherClient } from "../src/weather/openweather.client";
 import { ForecastResponse, LocationResult } from "../src/weather/weather.types";
 import { createTestDataSource } from "./test-data-source";
@@ -15,6 +16,15 @@ describe("weather endpoints", () => {
     getForecast: jest.fn(),
   };
   const dataSource = createTestDataSource();
+  const tokenService = {
+    validateAccessToken: jest.fn().mockResolvedValue({
+      issuer:
+        "https://11111111-1111-4111-8111-111111111111.ciamlogin.test/11111111-1111-4111-8111-111111111111/v2.0",
+      externalSubjectIdentifier: "weather-test-user",
+      displayName: "Weather Test User",
+      identityProvider: "entra-external-id",
+    }),
+  };
 
   beforeAll(async () => {
     configureTestEnvironment();
@@ -25,6 +35,8 @@ describe("weather endpoints", () => {
       .useValue(dataSource)
       .overrideProvider(OpenWeatherClient)
       .useValue(client)
+      .overrideProvider(EntraTokenService)
+      .useValue(tokenService)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -41,6 +53,13 @@ describe("weather endpoints", () => {
     expect(dataSource.destroy).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects unauthenticated weather access", async () => {
+    await request(app.getHttpServer())
+      .get("/api/weather/locations")
+      .query({ query: "London" })
+      .expect(401);
+  });
+
   it("normalizes a successful Unicode location search", async () => {
     client.searchLocations.mockResolvedValueOnce([
       {
@@ -52,8 +71,7 @@ describe("weather endpoints", () => {
       },
     ]);
 
-    const response = await request(app.getHttpServer())
-      .get("/api/weather/locations")
+    const response = await authorizedGet("/api/weather/locations")
       .query({ query: "  ירושלים  " })
       .expect(200);
     const body = response.body as LocationResult[];
@@ -72,8 +90,7 @@ describe("weather endpoints", () => {
   it("returns an empty location result", async () => {
     client.searchLocations.mockResolvedValueOnce([]);
 
-    const response = await request(app.getHttpServer())
-      .get("/api/weather/locations")
+    const response = await authorizedGet("/api/weather/locations")
       .query({ query: "Nowhere" })
       .expect(200);
 
@@ -83,9 +100,7 @@ describe("weather endpoints", () => {
   it.each([undefined, "   ", "a".repeat(101)])(
     "rejects an invalid city query",
     async (query) => {
-      const requestBuilder = request(app.getHttpServer()).get(
-        "/api/weather/locations",
-      );
+      const requestBuilder = authorizedGet("/api/weather/locations");
       if (query !== undefined) {
         requestBuilder.query({ query });
       }
@@ -100,9 +115,7 @@ describe("weather endpoints", () => {
     ["20", "181"],
     [undefined, "20"],
   ])("rejects invalid coordinates", async (lat, lon) => {
-    const requestBuilder = request(app.getHttpServer()).get(
-      "/api/weather/forecast",
-    );
+    const requestBuilder = authorizedGet("/api/weather/forecast");
     if (lat !== undefined) {
       requestBuilder.query({ lat });
     }
@@ -118,8 +131,7 @@ describe("weather endpoints", () => {
       new Error("upstream response with sensitive details"),
     );
 
-    const response = await request(app.getHttpServer())
-      .get("/api/weather/forecast")
+    const response = await authorizedGet("/api/weather/forecast")
       .query({ lat: 1, lon: 2 })
       .expect(503);
     const serializedBody = JSON.stringify(response.body);
@@ -132,12 +144,10 @@ describe("weather endpoints", () => {
   it("caches successful forecast responses", async () => {
     client.getForecast.mockResolvedValueOnce(createForecastPayload());
 
-    const firstResponse = await request(app.getHttpServer())
-      .get("/api/weather/forecast")
+    const firstResponse = await authorizedGet("/api/weather/forecast")
       .query({ lat: 10, lon: 20 })
       .expect(200);
-    const secondResponse = await request(app.getHttpServer())
-      .get("/api/weather/forecast")
+    const secondResponse = await authorizedGet("/api/weather/forecast")
       .query({ lat: "10.0", lon: "20.0" })
       .expect(200);
 
@@ -146,6 +156,12 @@ describe("weather endpoints", () => {
     );
     expect(client.getForecast).toHaveBeenCalledTimes(1);
   });
+
+  function authorizedGet(path: string) {
+    return request(app.getHttpServer())
+      .get(path)
+      .set("Authorization", "Bearer test-access-token");
+  }
 });
 
 function createForecastPayload() {

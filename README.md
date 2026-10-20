@@ -21,7 +21,7 @@ An npm-workspaces monorepo for a weather forecast web application with a React f
 
 - Node.js 22 (see `.nvmrc`)
 - npm, included with Node.js
-- Docker with the Compose plugin for local PostgreSQL
+- Docker with the Compose plugin for the local full stack
 
 ## Install dependencies
 
@@ -34,7 +34,7 @@ npm install
 
 If your environment does not provide `nvm`, install a current Node.js 22 release directly.
 
-## Local database
+## Local container stack
 
 For first-time setup only, copy each committed example when its corresponding `.env` file does not already exist:
 
@@ -43,24 +43,49 @@ cp .env.example .env
 cp apps/backend/.env.example apps/backend/.env
 ```
 
-Do not run those copy commands over existing files. If `apps/backend/.env` already contains an OpenWeather API key, keep that file in place and add only the six `DATABASE_*` entries shown in `apps/backend/.env.example`. Likewise, if the root `.env` already exists, add or update only the four database entries from the root example. Use the same new local-only database password in both files without printing or committing either real `.env` file.
+Do not run those copy commands over existing files. If `apps/backend/.env` already contains an OpenWeather API key, keep that file in place and add only the database and `ENTRA_*` entries shown in `apps/backend/.env.example`. Likewise, if the root `.env` already exists, add or update only the database and public Entra entries from the root example. Use the same new local-only database password in both files without printing or committing either real `.env` file.
 
-Start only PostgreSQL and check its health:
+Build and start the complete local environment:
 
 ```bash
-docker compose up -d postgres
-docker compose ps postgres
+docker compose up --build
 ```
 
-Run the schema migration from the repository root:
+The application is available only through the frontend at `http://localhost:8080`. Nginx serves the compiled React files and proxies `/api/*` over the Docker application network to NestJS. The backend connects to PostgreSQL over the private internal data network; its port is not published.
+
+Nginx adds baseline browser security headers. Its Content Security Policy permits only same-origin application resources plus connections and hidden frames to the exact configured CIAM origin; it does not use wildcard origins.
+
+Compose waits for PostgreSQL to become healthy, then the backend runs compiled pending migrations before starting. It waits for the backend health endpoint before starting the frontend. Repeated backend starts are safe when no migration is pending.
+
+In another terminal, inspect service health and bounded logs without rendering resolved Compose configuration:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 frontend backend
+docker compose logs --tail=100 postgres
+```
+
+Stop the containers while preserving local PostgreSQL data:
+
+```bash
+docker compose down
+```
+
+> **Destructive:** the following command also deletes the named volume and all local PostgreSQL data:
+
+```bash
+docker compose down --volumes
+```
+
+TypeORM maps backend TypeScript entities to PostgreSQL tables. Migrations provide reviewed schema history; schema synchronization and automatic extension installation are intentionally disabled.
+
+For host-based development against a PostgreSQL instance that is reachable with the settings in `apps/backend/.env`, run migrations from the repository root:
 
 ```bash
 npm run db:migrate
 ```
 
-TypeORM maps the backend's TypeScript entities to PostgreSQL tables. Migrations are the reviewed history of schema changes, and `synchronize` is intentionally disabled. Local PostgreSQL is containerized; production will use Azure Database for PostgreSQL Flexible Server instead.
-
-To safely revert the latest migration during local development:
+To safely revert the latest migration during host-based development:
 
 ```bash
 npm run db:migration:revert
@@ -72,9 +97,9 @@ Generate a future migration only after changing entity mappings:
 npm run db:migration:generate -- src/database/migrations/DescriptiveName
 ```
 
-At this incremental stage Compose runs PostgreSQL only. The frontend and backend continue to use the existing npm development workflow; their containers will be added later.
+The local Nginx and PostgreSQL containers are development and integration-test infrastructure. Azure production continues to use Azure Front Door, Azure Storage Static Website, App Service, Azure Database for PostgreSQL Flexible Server, and Azure Container Registry.
 
-## Run the application
+## Run directly with npm
 
 Start the frontend and backend together:
 
@@ -82,7 +107,7 @@ Start the frontend and backend together:
 npm run dev
 ```
 
-The frontend is available at `http://localhost:5173`. The backend is available at `http://localhost:3000`, with health information at `http://localhost:3000/api/health`.
+The directly run frontend is available at `http://localhost:5173`. The backend is available at `http://localhost:3000`, with health information at `http://localhost:3000/api/health`.
 
 You can also start each application independently:
 
@@ -93,11 +118,72 @@ npm run dev:backend
 
 The committed examples contain placeholders, not credentials. The backend requires OpenWeather and database settings and validates them during startup. Set `DATABASE_SSL=false` locally and `DATABASE_SSL=true` for Azure PostgreSQL TLS. Never place the private weather key or database credentials in frontend configuration.
 
+## Authentication
+
+Microsoft Entra External ID protects every business API route by default. `GET /api/health` is the only explicitly public application endpoint. The React SPA uses MSAL authorization-code flow with PKCE, keeps MSAL state in `sessionStorage`, acquires a delegated API access token, and sends it as a bearer token to `/api/auth/me` and weather endpoints. The backend validates the signature, issuer, audience, tenant, calling client, token version, expiry, and `access_as_user` scope before synchronizing the local user.
+
+The frontend requires these public build-time variables:
+
+- `VITE_ENTRA_CLIENT_ID`
+- `VITE_ENTRA_AUTHORITY`
+- `VITE_ENTRA_KNOWN_AUTHORITY`
+- `VITE_ENTRA_API_SCOPE`
+
+The backend requires these runtime variables:
+
+- `ENTRA_TENANT_ID`
+- `ENTRA_API_CLIENT_ID`
+- `ENTRA_ALLOWED_CLIENT_ID`
+- `ENTRA_OIDC_METADATA_URL`
+- `ENTRA_EXPECTED_ISSUER`
+- `ENTRA_REQUIRED_SCOPE`
+
+The committed examples contain the project's non-secret IDs and endpoints. Every `VITE_*` value is compiled into browser JavaScript and is public; never put a client secret, provider secret, token, weather key, or database credential in a `VITE_*` variable. This delegated SPA/API flow has no application client secret.
+
+For this External ID tenant, the frontend authority must include the tenant ID path while the known-authority host remains `azureweatherexercise3.ciamlogin.com`. The backend metadata URL uses that host and tenant path, but issuer validation uses the exact issuer published by the live metadata document: `https://79fb97ff-3c22-4210-b16d-e210b21db3e6.ciamlogin.com/79fb97ff-3c22-4210-b16d-e210b21db3e6/v2.0`.
+
+After changing a frontend build-time value, rebuild rather than only restarting containers:
+
+```bash
+docker compose up --build
+```
+
+Manual browser verification:
+
+1. Open `http://localhost:8080/` in a private browser window and select **Sign in**.
+2. Complete the configured Google, Microsoft Account, or Entra-managed email one-time passcode flow without sharing credentials with project tooling.
+3. Confirm the browser returns to `http://localhost:8080/`, shows the display name, and enables weather search.
+4. Search for a city, load a forecast, refresh the page, and verify the session remains available only for that browser session.
+5. Select **Sign out** and confirm protected weather functionality is no longer shown.
+
+The application keys users by validated issuer plus `oid` (or `sub` only when `oid` is absent). It does not use or persist email addresses and does not store or log access, ID, or refresh tokens. See [Entra External ID setup](docs/entra-external-id-setup.md) for registration details, privacy decisions, manual checks, and troubleshooting.
+
+For login problems, verify the SPA redirect URI exactly matches `http://localhost:8080/`, then check the configured authority/issuer, API audience GUID, delegated scope grant, and frontend client ID. If container values changed but the browser still uses old settings, rebuild the frontend image and clear that site's session storage before retrying.
+
 ## Weather forecast flow
 
 The browser searches and loads forecasts only through the backend endpoints under `/api/weather`. The backend uses fixed OpenWeather geocoding and five-day forecast paths, keeps the API key server-side, validates user input, and returns an application-owned response rather than the upstream payload.
 
 Successful location searches are cached for 60 minutes, and successful forecasts are cached for 10 minutes. This small cache is held in memory, is local to each backend instance, and is not shared across replicas. It should be replaced or reconsidered if globally shared caching becomes necessary.
+
+## Saved forecast history
+
+Authenticated users can create immutable historical snapshots and browse only their own history through these protected endpoints:
+
+- `POST /api/saved-forecasts` accepts only numeric `latitude` and `longitude`, obtains the normalized forecast through the backend weather service, and creates a new snapshot with HTTP 201.
+- `GET /api/saved-forecasts` returns newest-first summaries with an opaque cursor, a default limit of 20, and a maximum limit of 50.
+- `GET /api/saved-forecasts/:id` returns one stored snapshot without calling OpenWeather.
+
+Saving is server-authoritative: the browser cannot submit a user ID, owner, city name, identity field, or forecast payload. Every save creates a new row rather than replacing an earlier snapshot. The backend derives ownership from the validated Entra principal, synchronizes the local user when needed, and scopes list/detail queries by that user. A missing record and a record owned by someone else both return HTTP 404 to prevent ownership disclosure.
+
+Manual saved-history verification:
+
+1. Sign in at `http://localhost:8080/`, search for a city, and open its live forecast.
+2. Select **Save forecast** twice and confirm each action reports a newly created historical snapshot.
+3. Open **Saved forecasts** and confirm both newest-first entries appear with their saved times.
+4. Select an entry and confirm it is labeled **Historical saved snapshot**. In browser developer tools, confirm opening it calls `/api/saved-forecasts/:id` and does not call `/api/weather/forecast`.
+5. Return to search, then use **Load more** when more than one page is available.
+6. Sign in as a different test user and confirm the first user's history is not visible. Do not copy tokens or authorization headers into diagnostics.
 
 ## Build, lint, test, and format
 
@@ -119,13 +205,12 @@ Use `npm run format:check` to verify formatting without changing files.
 - Backend-only OpenWeather access with normalized responses
 - Local, per-instance in-memory caching
 - PostgreSQL entities, configuration, and migration foundation
-- Containerized local PostgreSQL service
+- Complete local frontend, backend, and PostgreSQL container stack
+- Microsoft Entra External ID authentication and privacy-safe user synchronization
+- Authenticated immutable saved forecasts and personal cursor-paginated history
 
 ### Deferred
 
-- Authentication
-- Saving forecasts and forecast history APIs
-- Frontend and backend containers
 - Terraform and Azure resources
 - CI/CD
 - Distributed caching

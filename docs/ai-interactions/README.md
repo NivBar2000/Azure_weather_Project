@@ -13,3 +13,7 @@ Implementation results are reviewed by a human before approval. Follow-up correc
 - [005 - Database Foundation](./005-database-foundation.md)
 - [006 - Database Review Fixes](./006-database-review-fixes.md)
 - [007 - Database Runtime Review Fixes](./007-database-runtime-review-fixes.md)
+- [008 - Local Container Stack](./008-local-container-stack.md)
+- [009 - Container Runtime Hardening](./009-container-runtime-hardening.md)
+- [010 - Authentication Foundation](./010-authentication-foundation.md)
+- [011 - Saved Forecast History](./011-saved-forecast-history.md)

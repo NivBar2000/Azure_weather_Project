@@ -6,8 +6,6 @@ services:
       POSTGRES_DB: ${DATABASE_NAME:?DATABASE_NAME must be configured}
       POSTGRES_USER: ${DATABASE_USER:?DATABASE_USER must be configured}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be configured}
-    ports:
-      - "${DATABASE_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -16,6 +14,79 @@ services:
       start_period: 10s
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - data
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "npm run migration:run:prod --workspace=@azure-weather/backend && exec node apps/backend/dist/main.js",
+      ]
+    env_file:
+      - ./apps/backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      FRONTEND_ORIGIN: http://localhost:8080
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: ${DATABASE_USER:?DATABASE_USER must be configured}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be configured}
+      DATABASE_NAME: ${DATABASE_NAME:?DATABASE_NAME must be configured}
+      DATABASE_SSL: "false"
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?ENTRA_TENANT_ID must be configured}
+      ENTRA_API_CLIENT_ID: ${ENTRA_API_CLIENT_ID:?ENTRA_API_CLIENT_ID must be configured}
+      ENTRA_ALLOWED_CLIENT_ID: ${ENTRA_ALLOWED_CLIENT_ID:?ENTRA_ALLOWED_CLIENT_ID must be configured}
+      ENTRA_OIDC_METADATA_URL: ${ENTRA_OIDC_METADATA_URL:?ENTRA_OIDC_METADATA_URL must be configured}
+      ENTRA_EXPECTED_ISSUER: ${ENTRA_EXPECTED_ISSUER:?ENTRA_EXPECTED_ISSUER must be configured}
+      ENTRA_REQUIRED_SCOPE: ${ENTRA_REQUIRED_SCOPE:?ENTRA_REQUIRED_SCOPE must be configured}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(response => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - application
+      - data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        VITE_ENTRA_CLIENT_ID: ${VITE_ENTRA_CLIENT_ID:?VITE_ENTRA_CLIENT_ID must be configured}
+        VITE_ENTRA_AUTHORITY: ${VITE_ENTRA_AUTHORITY:?VITE_ENTRA_AUTHORITY must be configured}
+        VITE_ENTRA_KNOWN_AUTHORITY: ${VITE_ENTRA_KNOWN_AUTHORITY:?VITE_ENTRA_KNOWN_AUTHORITY must be configured}
+        VITE_ENTRA_API_SCOPE: ${VITE_ENTRA_API_SCOPE:?VITE_ENTRA_API_SCOPE must be configured}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - application
 
 volumes:
   postgres-data:
+
+networks:
+  application:
+  data:
+    internal: true

@@ -1,0 +1,27 @@
+.git
+.github
+**/node_modules
+**/dist
+**/coverage
+
+# Never include real environment files in a build context.
+**/.env
+**/.env.*
+!**/.env.example
+
+*.log
+*.tmp
+*.temp
+**/.cache
+**/.eslintcache
+**/*.tsbuildinfo
+
+.idea
+.vscode
+**/.DS_Store
+**/Thumbs.db
+
+docs
+infra
+AGENTS.md
+README.md

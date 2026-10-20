@@ -29,6 +29,9 @@ describe("database entity mappings", () => {
     const snapshot = metadata
       .filterColumns(SavedForecastEntity)
       .find(({ propertyName }) => propertyName === "forecastSnapshot");
+    const savedAt = metadata
+      .filterColumns(SavedForecastEntity)
+      .find(({ propertyName }) => propertyName === "savedAt");
     const relation = metadata
       .filterRelations(SavedForecastEntity)
       .find(({ propertyName }) => propertyName === "user");
@@ -36,9 +39,12 @@ describe("database entity mappings", () => {
 
     expect(table.name).toBe("saved_forecasts");
     expect(snapshot?.options.type).toBe("jsonb");
+    expect(savedAt?.options.type).toBe("timestamptz");
+    expect(savedAt?.options.precision).toBe(3);
+    expect(typeof savedAt?.options.default).toBe("function");
     expect(relation?.relationType).toBe("many-to-one");
     expect(relation?.options.onDelete).toBe("RESTRICT");
     expect(index.name).toBe("IDX_saved_forecasts_user_saved_at");
-    expect(index.columns).toEqual(["userId", "savedAt"]);
+    expect(index.columns).toEqual(["userId", "savedAt", "id"]);
   });
 });

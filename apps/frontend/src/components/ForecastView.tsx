@@ -1,29 +1,86 @@
+import { useEffect, useRef } from "react";
 import { DailyForecast, ForecastResponse } from "../api/weatherApi";
+import { formatSavedTime } from "./dateFormat";
 import { WeatherSymbol } from "./WeatherSymbol";
 
 interface ForecastViewProps {
   forecast: ForecastResponse;
   onAnotherSearch: () => void;
+  mode?: "live" | "historical";
+  savedAt?: string;
+  saving?: boolean;
+  saveMessage?: string;
+  saveError?: string;
+  onSave?: () => void;
 }
 
-export function ForecastView({ forecast, onAnotherSearch }: ForecastViewProps) {
+export function ForecastView({
+  forecast,
+  onAnotherSearch,
+  mode = "live",
+  savedAt,
+  saving = false,
+  saveMessage = "",
+  saveError = "",
+  onSave,
+}: ForecastViewProps) {
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (mode === "historical") {
+      heading.current?.focus();
+    }
+  }, [mode, savedAt]);
+
   return (
     <section className="forecast" aria-labelledby="forecast-heading">
       <div className="forecast-heading-row">
         <div>
-          <p className="eyebrow">Five-day outlook</p>
-          <h2 id="forecast-heading">
+          <p className="eyebrow">
+            {mode === "historical"
+              ? "Historical saved snapshot"
+              : "Live five-day outlook"}
+          </p>
+          <h2 id="forecast-heading" ref={heading} tabIndex={-1}>
             Forecast for {forecast.location.name}, {forecast.location.country}
           </h2>
+          {mode === "historical" && savedAt && (
+            <p className="snapshot-time">
+              Saved <time dateTime={savedAt}>{formatSavedTime(savedAt)}</time>
+            </p>
+          )}
         </div>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={onAnotherSearch}
-        >
-          Search another city
-        </button>
+        <div className="forecast-actions">
+          {mode === "live" && onSave && (
+            <button
+              className="primary-button"
+              type="button"
+              disabled={saving}
+              onClick={onSave}
+            >
+              {saving ? "Saving…" : "Save forecast"}
+            </button>
+          )}
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={onAnotherSearch}
+          >
+            {mode === "historical" ? "Return to search" : "Search another city"}
+          </button>
+        </div>
       </div>
+
+      {saveMessage && (
+        <p className="notice success-message" role="status">
+          {saveMessage}
+        </p>
+      )}
+      {saveError && (
+        <p className="notice error-message" role="alert">
+          {saveError}
+        </p>
+      )}
 
       <div className="forecast-grid">
         {forecast.days.map((day) => (

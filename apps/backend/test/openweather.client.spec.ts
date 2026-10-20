@@ -15,6 +15,16 @@ describe("OpenWeatherClient", () => {
       name: "test-database",
       ssl: false,
     },
+    entra: {
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      apiClientId: "22222222-2222-4222-8222-222222222222",
+      allowedClientId: "33333333-3333-4333-8333-333333333333",
+      oidcMetadataUrl:
+        "https://tenant-name.ciamlogin.test/11111111-1111-4111-8111-111111111111/v2.0/.well-known/openid-configuration",
+      expectedIssuer:
+        "https://11111111-1111-4111-8111-111111111111.ciamlogin.test/11111111-1111-4111-8111-111111111111/v2.0",
+      requiredScope: "access_as_user",
+    },
   };
 
   it("uses the fixed geocoding path and safely encoded parameters", async () => {

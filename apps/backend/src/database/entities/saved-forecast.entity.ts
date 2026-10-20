@@ -8,9 +8,10 @@ import {
   PrimaryGeneratedColumn,
 } from "typeorm";
 import { UserEntity } from "./user.entity";
+import { ForecastResponse } from "../../weather/weather.types";
 
 @Entity({ name: "saved_forecasts" })
-@Index("IDX_saved_forecasts_user_saved_at", ["userId", "savedAt"])
+@Index("IDX_saved_forecasts_user_saved_at", ["userId", "savedAt", "id"])
 export class SavedForecastEntity {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -38,8 +39,13 @@ export class SavedForecastEntity {
   longitude!: number;
 
   @Column({ name: "forecast_snapshot", type: "jsonb" })
-  forecastSnapshot!: Record<string, unknown>;
+  forecastSnapshot!: ForecastResponse;
 
-  @CreateDateColumn({ name: "saved_at", type: "timestamptz" })
+  @CreateDateColumn({
+    name: "saved_at",
+    type: "timestamptz",
+    precision: 3,
+    default: () => "CURRENT_TIMESTAMP(3)",
+  })
   savedAt!: Date;
 }

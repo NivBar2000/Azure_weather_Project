@@ -37,6 +37,50 @@ button:disabled {
   opacity: 0.65;
 }
 
+.primary-button {
+  padding: 0.9rem 1.35rem;
+  color: #fff;
+  font-weight: 750;
+  background: #086dad;
+  border: 1px solid #086dad;
+  border-radius: 0.8rem;
+}
+
+.primary-button:hover {
+  background: #075a8f;
+}
+
+.authentication-shell {
+  display: grid;
+  place-items: center;
+}
+
+.authentication-panel {
+  width: min(100%, 34rem);
+}
+
+.authentication-panel .primary-button,
+.authentication-panel .secondary-button {
+  margin-top: 1rem;
+  margin-right: 0.75rem;
+}
+
+.account-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 0.75rem clamp(1.25rem, 4vw, 3rem);
+  color: #17304d;
+  font-weight: 700;
+  background: #fff;
+  border-bottom: 1px solid #d5e5f0;
+}
+
+.account-bar .secondary-button {
+  padding-block: 0.55rem;
+}
+
 :focus-visible {
   outline: 3px solid #ffbf47;
   outline-offset: 3px;
@@ -61,6 +105,14 @@ button:disabled {
   align-items: center;
   gap: 1.25rem;
   margin-bottom: 2rem;
+}
+
+.application-navigation {
+  display: flex;
+  width: min(100%, 75rem);
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin: -1rem auto 1rem;
 }
 
 .brand-mark {
@@ -241,7 +293,8 @@ h1 {
   border-color: #76acd0;
 }
 
-.forecast-heading-row {
+.forecast-heading-row,
+.section-heading-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -249,8 +302,69 @@ h1 {
   margin-bottom: 1.5rem;
 }
 
-.forecast-heading-row h2 {
+.forecast-heading-row h2,
+.section-heading-row h2 {
   margin-bottom: 0;
+}
+
+.forecast-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.75rem;
+}
+
+.snapshot-time {
+  margin: 0.5rem 0 0;
+  color: #526a82;
+}
+
+.success-message {
+  color: #175e44;
+  background: #e4f8ee;
+  border: 1px solid #bdebd4;
+}
+
+.history-list {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  margin: 1.5rem 0 0;
+  list-style: none;
+}
+
+.history-list button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  color: #17304d;
+  text-align: left;
+  background: #f6fbff;
+  border: 1px solid #c9deed;
+  border-radius: 0.8rem;
+}
+
+.history-list button:hover {
+  background: #e9f5fe;
+  border-color: #76acd0;
+}
+
+.history-list button > span,
+.history-list button span span {
+  display: block;
+}
+
+.history-list button span span,
+.history-list time {
+  margin-top: 0.25rem;
+  color: #526a82;
+  font-size: 0.85rem;
+}
+
+.load-more-button {
+  margin-top: 1rem;
 }
 
 .secondary-button {
@@ -390,12 +504,17 @@ summary {
   }
 
   .search-controls,
-  .forecast-heading-row {
+  .forecast-heading-row,
+  .section-heading-row,
+  .forecast-actions,
+  .application-navigation,
+  .history-list button {
     flex-direction: column;
   }
 
   .search-controls button,
-  .secondary-button {
+  .secondary-button,
+  .forecast-actions .primary-button {
     width: 100%;
   }
 }

@@ -1,7 +1,15 @@
 import { DataSource } from "typeorm";
 import { createTypeOrmOptions } from "../src/database/database.options";
 
-type TestDataSource = Pick<DataSource, "isInitialized" | "manager" | "destroy">;
+type TestDataSource = Pick<
+  DataSource,
+  | "isInitialized"
+  | "manager"
+  | "destroy"
+  | "entityMetadatas"
+  | "options"
+  | "getRepository"
+>;
 
 export function createTestDataSource(): TestDataSource {
   const dormantDataSource = new DataSource(
@@ -18,6 +26,9 @@ export function createTestDataSource(): TestDataSource {
   return {
     isInitialized: true,
     manager: dormantDataSource.manager,
+    entityMetadatas: dormantDataSource.entityMetadatas,
+    options: dormantDataSource.options,
+    getRepository: dormantDataSource.getRepository.bind(dormantDataSource),
     destroy: jest.fn((): Promise<void> => Promise.resolve()),
   };
 }

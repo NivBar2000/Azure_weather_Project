@@ -10,6 +10,16 @@ export interface AppConfiguration {
   frontendOrigin: string;
   port: number;
   database: DatabaseConfiguration;
+  entra: EntraConfiguration;
+}
+
+export interface EntraConfiguration {
+  tenantId: string;
+  apiClientId: string;
+  allowedClientId: string;
+  oidcMetadataUrl: string;
+  expectedIssuer: string;
+  requiredScope: string;
 }
 
 export interface DatabaseConfiguration {
@@ -42,6 +52,46 @@ export function createAppConfiguration(
     frontendOrigin,
     port,
     database: createDatabaseConfiguration(environment),
+    entra: createEntraConfiguration(environment),
+  };
+}
+
+export function createEntraConfiguration(
+  environment: NodeJS.ProcessEnv = process.env,
+): EntraConfiguration {
+  return {
+    tenantId: validateGuid(
+      requireNonEmpty(environment.ENTRA_TENANT_ID, "ENTRA_TENANT_ID"),
+      "ENTRA_TENANT_ID",
+    ),
+    apiClientId: validateGuid(
+      requireNonEmpty(environment.ENTRA_API_CLIENT_ID, "ENTRA_API_CLIENT_ID"),
+      "ENTRA_API_CLIENT_ID",
+    ),
+    allowedClientId: validateGuid(
+      requireNonEmpty(
+        environment.ENTRA_ALLOWED_CLIENT_ID,
+        "ENTRA_ALLOWED_CLIENT_ID",
+      ),
+      "ENTRA_ALLOWED_CLIENT_ID",
+    ),
+    oidcMetadataUrl: validateHttpsUrl(
+      requireNonEmpty(
+        environment.ENTRA_OIDC_METADATA_URL,
+        "ENTRA_OIDC_METADATA_URL",
+      ),
+      "ENTRA_OIDC_METADATA_URL",
+    ),
+    expectedIssuer: validateHttpsUrl(
+      requireNonEmpty(
+        environment.ENTRA_EXPECTED_ISSUER,
+        "ENTRA_EXPECTED_ISSUER",
+      ),
+      "ENTRA_EXPECTED_ISSUER",
+    ),
+    requiredScope: validateScope(
+      requireNonEmpty(environment.ENTRA_REQUIRED_SCOPE, "ENTRA_REQUIRED_SCOPE"),
+    ),
   };
 }
 
@@ -119,4 +169,35 @@ function validateBoolean(value: string, name: string): boolean {
     return false;
   }
   throw new Error(`${name} must be either true or false`);
+}
+
+function validateGuid(value: string, name: string): string {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  ) {
+    throw new Error(`${name} must be a valid GUID`);
+  }
+  return value.toLowerCase();
+}
+
+function validateHttpsUrl(value: string, name: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid HTTPS URL`);
+  }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    throw new Error(`${name} must be a valid HTTPS URL`);
+  }
+  return url.href;
+}
+
+function validateScope(value: string): string {
+  if (/\s/.test(value)) {
+    throw new Error("ENTRA_REQUIRED_SCOPE must be a single scope value");
+  }
+  return value;
 }
