@@ -1,0 +1,27 @@
+# Safe placeholders only. Copy to an untracked terraform.tfvars file and replace
+# values locally without committing credentials or environment identifiers.
+project_name        = "azure-weather"
+environment         = "prod"
+unique_suffix       = "replace1"
+resource_group_name = "replace-with-existing-resource-group"
+
+backend_image_repository = "weather-backend"
+backend_image_tag        = "replace-with-immutable-release-tag"
+
+postgresql_administrator_login    = "weatheradmin"
+postgresql_administrator_password = "replace-with-a-strong-password-kept-out-of-git"
+database_name                     = "azure_weather"
+
+openweather_secret_name      = "openweather-api-key"
+database_password_secret_name = "postgresql-administrator-password"
+
+entra_tenant_id         = "00000000-0000-4000-8000-000000000000"
+entra_api_client_id     = "00000000-0000-4000-8000-000000000000"
+entra_allowed_client_id = "00000000-0000-4000-8000-000000000000"
+entra_oidc_metadata_url = "https://replace-with-ciam-host.example/replace-with-tenant-id/v2.0/.well-known/openid-configuration"
+entra_expected_issuer   = "https://replace-with-issuer.example/replace-with-tenant-id/v2.0"
+
+tags = {
+  owner       = "replace-with-team-name"
+  cost-center = "replace-with-cost-center"
+}

@@ -11,10 +11,11 @@ An npm-workspaces monorepo for a weather forecast web application with a React f
 |   `-- backend/           # NestJS and TypeScript
 |-- docs/
 |   |-- ai-interactions/   # Numbered AI interaction records
+|   |-- azure-infrastructure.md
 |   |-- azure-architecture.drawio
 |   `-- azure-architecture.mmd
 `-- infra/
-    `-- terraform/         # Reserved for a later step
+    `-- terraform/         # Production Azure infrastructure foundation
 ```
 
 ## Prerequisites
@@ -98,6 +99,23 @@ npm run db:migration:generate -- src/database/migrations/DescriptiveName
 ```
 
 The local Nginx and PostgreSQL containers are development and integration-test infrastructure. Azure production continues to use Azure Front Door, Azure Storage Static Website, App Service, Azure Database for PostgreSQL Flexible Server, and Azure Container Registry.
+
+## Production Azure infrastructure
+
+The reviewable Terraform root module under `infra/terraform` represents the approved Sweden Central production architecture. It defines Front Door Standard, Storage Static Website, a managed-identity App Service/ACR path, private zone-redundant PostgreSQL, Key Vault, networking, autoscale, and monitoring. It reads an existing resource group and does not manage Entra External ID.
+
+No Azure resource has been provisioned by Interaction 012. See [Azure infrastructure](docs/azure-infrastructure.md) for topology, security and cost decisions, manual prerequisites, deployment order, and limitations. See the [Terraform README](infra/terraform/README.md) for safe placeholders and local validation.
+
+Safe non-deploying validation:
+
+```bash
+cd infra/terraform
+terraform fmt -check -recursive
+terraform init -backend=false
+terraform validate
+```
+
+Do not commit environment-specific `terraform.tfvars` or `backend.hcl` files. Do not run deployment commands without a separately reviewed and authorized deployment interaction.
 
 ## Run directly with npm
 
@@ -208,9 +226,10 @@ Use `npm run format:check` to verify formatting without changing files.
 - Complete local frontend, backend, and PostgreSQL container stack
 - Microsoft Entra External ID authentication and privacy-safe user synchronization
 - Authenticated immutable saved forecasts and personal cursor-paginated history
+- Production Azure Terraform configuration and operating documentation
 
 ### Deferred
 
-- Terraform and Azure resources
+- Actual Azure provisioning
 - CI/CD
 - Distributed caching

@@ -1,0 +1,8 @@
+# Safe placeholders for an existing, separately secured Azure Storage backend.
+# The state container and access controls are prerequisites and are not created
+# by this root module.
+resource_group_name  = "replace-with-terraform-state-resource-group"
+storage_account_name = "replacewithstateaccount"
+container_name       = "tfstate"
+key                  = "azure-weather/prod.tfstate"
+use_azuread_auth      = true
