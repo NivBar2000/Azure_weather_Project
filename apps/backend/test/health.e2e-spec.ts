@@ -8,6 +8,7 @@ describe("GET /api/health", () => {
   let app: INestApplication;
 
   beforeAll(async () => {
+    process.env.OPENWEATHER_API_KEY = "test-only-placeholder";
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();

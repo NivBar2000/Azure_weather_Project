@@ -8,3 +8,5 @@ Implementation results are reviewed by a human before approval. Follow-up correc
 
 - [001 - Project Foundation](./001-project-foundation.md)
 - [002 - Foundation Review Fixes](./002-foundation-review-fixes.md)
+- [003 - Weather Forecast](./003-weather-forecast.md)
+- [004 - Weather Review Fixes](./004-weather-review-fixes.md)
