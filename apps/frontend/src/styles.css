@@ -1,0 +1,142 @@
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #17304d;
+  background: #eaf5ff;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+.page-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background:
+    radial-gradient(circle at 15% 15%, rgb(255 255 255 / 85%), transparent 30%),
+    linear-gradient(145deg, #dff3ff 0%, #f5fbff 55%, #cfe9ff 100%);
+}
+
+.weather-card {
+  width: min(100%, 42rem);
+  padding: clamp(2rem, 7vw, 4.5rem);
+  text-align: center;
+  background: rgb(255 255 255 / 82%);
+  border: 1px solid rgb(255 255 255 / 90%);
+  border-radius: 2rem;
+  box-shadow: 0 1.5rem 4rem rgb(31 93 143 / 18%);
+  backdrop-filter: blur(14px);
+}
+
+.weather-icon {
+  position: relative;
+  width: 6.5rem;
+  height: 5rem;
+  margin: 0 auto 1.5rem;
+}
+
+.sun {
+  position: absolute;
+  top: 0;
+  right: 0.65rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: #ffc857;
+  box-shadow: 0 0 0 0.6rem rgb(255 200 87 / 20%);
+}
+
+.cloud {
+  position: absolute;
+  bottom: 0;
+  left: 0.4rem;
+  width: 5.5rem;
+  height: 2.6rem;
+  border-radius: 2rem;
+  background: #ffffff;
+  box-shadow: 0 0.7rem 1.4rem rgb(39 91 126 / 18%);
+}
+
+.cloud::before,
+.cloud::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.cloud::before {
+  width: 2.8rem;
+  height: 2.8rem;
+  top: -1.25rem;
+  left: 0.8rem;
+}
+
+.cloud::after {
+  width: 2rem;
+  height: 2rem;
+  top: -0.7rem;
+  right: 0.65rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.65rem;
+  color: #1674b8;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  color: #102b46;
+  font-size: clamp(2.5rem, 8vw, 4.8rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.description {
+  max-width: 31rem;
+  margin: 1.5rem auto 2rem;
+  color: #526a82;
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  color: #175e44;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: #e4f8ee;
+  border: 1px solid #bdebd4;
+  border-radius: 999px;
+}
+
+.status-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #21a36a;
+  box-shadow: 0 0 0 0.25rem rgb(33 163 106 / 13%);
+}
