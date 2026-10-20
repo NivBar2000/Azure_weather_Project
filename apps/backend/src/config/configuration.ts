@@ -9,6 +9,16 @@ export interface AppConfiguration {
   openWeatherBaseUrl: string;
   frontendOrigin: string;
   port: number;
+  database: DatabaseConfiguration;
+}
+
+export interface DatabaseConfiguration {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  name: string;
+  ssl: boolean;
 }
 
 export function createAppConfiguration(
@@ -24,13 +34,36 @@ export function createAppConfiguration(
   const frontendOrigin = validateOrigin(
     environment.FRONTEND_ORIGIN ?? DEFAULT_FRONTEND_ORIGIN,
   );
-  const port = validatePort(environment.PORT ?? String(DEFAULT_PORT));
+  const port = validatePort(environment.PORT ?? String(DEFAULT_PORT), "PORT");
 
   return {
     openWeatherApiKey,
     openWeatherBaseUrl,
     frontendOrigin,
     port,
+    database: createDatabaseConfiguration(environment),
+  };
+}
+
+export function createDatabaseConfiguration(
+  environment: NodeJS.ProcessEnv = process.env,
+): DatabaseConfiguration {
+  return {
+    host: requireNonEmpty(environment.DATABASE_HOST, "DATABASE_HOST"),
+    port: validatePort(
+      requireNonEmpty(environment.DATABASE_PORT, "DATABASE_PORT"),
+      "DATABASE_PORT",
+    ),
+    username: requireNonEmpty(environment.DATABASE_USER, "DATABASE_USER"),
+    password: requireNonEmpty(
+      environment.DATABASE_PASSWORD,
+      "DATABASE_PASSWORD",
+    ),
+    name: requireNonEmpty(environment.DATABASE_NAME, "DATABASE_NAME"),
+    ssl: validateBoolean(
+      requireNonEmpty(environment.DATABASE_SSL, "DATABASE_SSL"),
+      "DATABASE_SSL",
+    ),
   };
 }
 
@@ -70,10 +103,20 @@ function parseHttpUrl(value: string, name: string): URL {
   }
 }
 
-function validatePort(value: string): number {
+function validatePort(value: string, name: string): number {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error("PORT must be an integer between 1 and 65535");
+    throw new Error(`${name} must be an integer between 1 and 65535`);
   }
   return port;
+}
+
+function validateBoolean(value: string, name: string): boolean {
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  throw new Error(`${name} must be either true or false`);
 }

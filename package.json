@@ -16,6 +16,9 @@
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "db:migration:generate": "npm run migration:generate --workspace=@azure-weather/backend --",
+    "db:migrate": "npm run migration:run --workspace=@azure-weather/backend",
+    "db:migration:revert": "npm run migration:revert --workspace=@azure-weather/backend",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

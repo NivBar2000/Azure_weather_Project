@@ -7,14 +7,20 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "lint": "eslint src test --max-warnings=0",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/typeorm.datasource.ts",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/typeorm.datasource.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/typeorm.datasource.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.8",
     "@nestjs/core": "^11.1.8",
     "@nestjs/platform-express": "^11.1.8",
+    "@nestjs/typeorm": "^11.0.3",
+    "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "typeorm": "^0.3.31"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

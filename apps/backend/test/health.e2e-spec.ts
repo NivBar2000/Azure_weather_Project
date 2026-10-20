@@ -1,17 +1,24 @@
 import { INestApplication } from "@nestjs/common";
+import { getDataSourceToken } from "@nestjs/typeorm";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { HealthResponse } from "../src/health/health.service";
+import { createTestDataSource } from "./test-data-source";
+import { configureTestEnvironment } from "./test-environment";
 
 describe("GET /api/health", () => {
   let app: INestApplication;
+  const dataSource = createTestDataSource();
 
   beforeAll(async () => {
-    process.env.OPENWEATHER_API_KEY = "test-only-placeholder";
+    configureTestEnvironment();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(getDataSourceToken())
+      .useValue(dataSource)
+      .compile();
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api");
@@ -20,6 +27,7 @@ describe("GET /api/health", () => {
 
   afterAll(async () => {
     await app.close();
+    expect(dataSource.destroy).toHaveBeenCalledTimes(1);
   });
 
   it("returns the service health", async () => {

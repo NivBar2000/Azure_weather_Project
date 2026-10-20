@@ -1,6 +1,6 @@
 # Azure Weather Project
 
-A clean npm-workspaces monorepo foundation for a weather forecast web application. This first step provides a React frontend, a NestJS backend, local development tooling, and an auditable record of AI-assisted implementation.
+An npm-workspaces monorepo for a weather forecast web application with a React frontend, a NestJS backend, and a PostgreSQL database foundation.
 
 ## Repository structure
 
@@ -21,6 +21,7 @@ A clean npm-workspaces monorepo foundation for a weather forecast web applicatio
 
 - Node.js 22 (see `.nvmrc`)
 - npm, included with Node.js
+- Docker with the Compose plugin for local PostgreSQL
 
 ## Install dependencies
 
@@ -33,7 +34,47 @@ npm install
 
 If your environment does not provide `nvm`, install a current Node.js 22 release directly.
 
-## Run locally
+## Local database
+
+For first-time setup only, copy each committed example when its corresponding `.env` file does not already exist:
+
+```bash
+cp .env.example .env
+cp apps/backend/.env.example apps/backend/.env
+```
+
+Do not run those copy commands over existing files. If `apps/backend/.env` already contains an OpenWeather API key, keep that file in place and add only the six `DATABASE_*` entries shown in `apps/backend/.env.example`. Likewise, if the root `.env` already exists, add or update only the four database entries from the root example. Use the same new local-only database password in both files without printing or committing either real `.env` file.
+
+Start only PostgreSQL and check its health:
+
+```bash
+docker compose up -d postgres
+docker compose ps postgres
+```
+
+Run the schema migration from the repository root:
+
+```bash
+npm run db:migrate
+```
+
+TypeORM maps the backend's TypeScript entities to PostgreSQL tables. Migrations are the reviewed history of schema changes, and `synchronize` is intentionally disabled. Local PostgreSQL is containerized; production will use Azure Database for PostgreSQL Flexible Server instead.
+
+To safely revert the latest migration during local development:
+
+```bash
+npm run db:migration:revert
+```
+
+Generate a future migration only after changing entity mappings:
+
+```bash
+npm run db:migration:generate -- src/database/migrations/DescriptiveName
+```
+
+At this incremental stage Compose runs PostgreSQL only. The frontend and backend continue to use the existing npm development workflow; their containers will be added later.
+
+## Run the application
 
 Start the frontend and backend together:
 
@@ -50,7 +91,7 @@ npm run dev:frontend
 npm run dev:backend
 ```
 
-Copy the relevant `.env.example` to `.env` inside an application directory when local overrides are needed. The committed examples contain no credentials. The backend requires `OPENWEATHER_API_KEY`; it validates weather-service, frontend-origin, and port configuration during startup. Never place the private key in frontend configuration.
+The committed examples contain placeholders, not credentials. The backend requires OpenWeather and database settings and validates them during startup. Set `DATABASE_SSL=false` locally and `DATABASE_SSL=true` for Azure PostgreSQL TLS. Never place the private weather key or database credentials in frontend configuration.
 
 ## Weather forecast flow
 
@@ -77,12 +118,14 @@ Use `npm run format:check` to verify formatting without changing files.
 - Five-day forecasts with expandable three-hour details
 - Backend-only OpenWeather access with normalized responses
 - Local, per-instance in-memory caching
+- PostgreSQL entities, configuration, and migration foundation
+- Containerized local PostgreSQL service
 
 ### Deferred
 
 - Authentication
-- PostgreSQL and saved forecasts
-- Docker
+- Saving forecasts and forecast history APIs
+- Frontend and backend containers
 - Terraform and Azure resources
 - CI/CD
 - Distributed caching

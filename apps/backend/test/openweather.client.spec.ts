@@ -7,6 +7,14 @@ describe("OpenWeatherClient", () => {
     openWeatherBaseUrl: "https://api.openweathermap.org",
     frontendOrigin: "http://localhost:5173",
     port: 3000,
+    database: {
+      host: "localhost",
+      port: 5432,
+      username: "test-user",
+      password: "test-only-placeholder",
+      name: "test-database",
+      ssl: false,
+    },
   };
 
   it("uses the fixed geocoding path and safely encoded parameters", async () => {

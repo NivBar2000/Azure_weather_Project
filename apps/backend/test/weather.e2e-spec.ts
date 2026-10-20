@@ -1,9 +1,12 @@
 import { INestApplication } from "@nestjs/common";
+import { getDataSourceToken } from "@nestjs/typeorm";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { OpenWeatherClient } from "../src/weather/openweather.client";
 import { ForecastResponse, LocationResult } from "../src/weather/weather.types";
+import { createTestDataSource } from "./test-data-source";
+import { configureTestEnvironment } from "./test-environment";
 
 describe("weather endpoints", () => {
   let app: INestApplication;
@@ -11,12 +14,15 @@ describe("weather endpoints", () => {
     searchLocations: jest.fn(),
     getForecast: jest.fn(),
   };
+  const dataSource = createTestDataSource();
 
   beforeAll(async () => {
-    process.env.OPENWEATHER_API_KEY = "test-only-placeholder";
+    configureTestEnvironment();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(getDataSourceToken())
+      .useValue(dataSource)
       .overrideProvider(OpenWeatherClient)
       .useValue(client)
       .compile();
@@ -32,6 +38,7 @@ describe("weather endpoints", () => {
 
   afterAll(async () => {
     await app.close();
+    expect(dataSource.destroy).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes a successful Unicode location search", async () => {
