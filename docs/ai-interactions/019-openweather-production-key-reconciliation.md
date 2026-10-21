@@ -225,8 +225,8 @@ The production and human-validation outcomes in this record are based on the exp
 
 ## Human Review
 
-Pending
+Checked and approved by the human reviewer on 2026-10-21.
 
 ## Final Status
 
-Awaiting human review
+Approved

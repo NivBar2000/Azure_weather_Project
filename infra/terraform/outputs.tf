@@ -3,6 +3,31 @@ output "front_door_endpoint_url" {
   value       = local.front_door_origin
 }
 
+output "front_door_endpoint_hostname" {
+  description = "Existing Azure Front Door endpoint hostname that the future www CNAME must target."
+  value       = azurerm_cdn_frontdoor_endpoint.production.host_name
+}
+
+output "front_door_custom_domain_hostname" {
+  description = "Production custom-domain hostname created in Front Door."
+  value       = azurerm_cdn_frontdoor_custom_domain.www.host_name
+}
+
+output "front_door_custom_domain_dns_validation_token" {
+  description = "Azure-generated value for the Namecheap _dnsauth.www TXT record. Available after the Stage 1 apply; do not invent this value."
+  value       = azurerm_cdn_frontdoor_custom_domain.www.validation_token
+}
+
+output "front_door_custom_domain_dns_validation_txt_record_host" {
+  description = "Namecheap-relative host/name for the TXT record that validates www.nivbarweather.com."
+  value       = "_dnsauth.www"
+}
+
+output "front_door_custom_domain_association_enabled" {
+  description = "Whether www.nivbarweather.com is associated with both the frontend and API Front Door routes."
+  value       = var.front_door_custom_domain_association_enabled
+}
+
 output "front_door_profile_resource_guid" {
   description = "Front Door profile GUID sent in X-Azure-FDID and enforced by the App Service access restriction."
   value       = azurerm_cdn_frontdoor_profile.production.resource_guid

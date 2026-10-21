@@ -364,6 +364,12 @@ variable "entra_required_scope" {
   }
 }
 
+variable "front_door_custom_domain_association_enabled" {
+  description = "Associates www.nivbarweather.com with both Front Door routes after DNS validation and managed-certificate issuance. Keep false for Stage 1."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Additional non-sensitive tags merged with the standard project tags."
   type        = map(string)

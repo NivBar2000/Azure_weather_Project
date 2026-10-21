@@ -2,28 +2,28 @@
 
 ## Status and scope
 
-Interaction 012 adds a production-oriented Terraform foundation under `infra/terraform`. It represents the approved architecture but has not provisioned, imported, queried, or changed an Azure resource. The existing Azure resource group and the manually configured Microsoft Entra External ID tenant/app registrations remain outside Terraform.
+Interaction 012 introduced the production-oriented Terraform foundation under `infra/terraform`; later reviewed interactions deployed it. The existing Azure resource group and the manually configured Microsoft Entra External ID tenant/app registrations remain outside Terraform.
 
 The selected region is `swedencentral`. Terraform deploys one cost-focused Azure Front Door Standard profile. Front Door Premium is documented only as an alternative and is not deployed alongside Standard.
 
 ## Components
 
-| Component                              | Purpose and configuration                                                                                                                                                  |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Azure Front Door Standard              | Global HTTPS entry point with a non-cached `/api/*` route and compressed/cached static-content route.                                                                      |
-| Azure Storage Static Website           | Hosts the React/Vite `dist` output; secure transfer and TLS 1.2 are required, shared public blob-container access is disabled, and `index.html` is the SPA error document. |
-| Azure Container Registry               | Stores the backend image; Basic is the default, the admin account is disabled, and App Service pulls with managed identity.                                                |
-| Container Apps migration environment   | Uses the dedicated `10.40.3.0/24` delegated subnet and a Consumption workload profile for the manual one-shot TypeORM job `azure-weather-prod-mig-d2cc26`.                 |
-| GitHub production deployment identity  | Uses a user-assigned identity and Environment-scoped OIDC federation; resource-scoped roles support the manual repository CD workflow without client secrets.              |
-| Linux App Service                      | Runs the existing NestJS container on port 3000 in a P0v3 plan, with zone balancing, two baseline workers, and CPU autoscale through four.                                 |
-| PostgreSQL Flexible Server             | PostgreSQL 17 by default, General Purpose compute, zone-redundant HA, private network access, configurable storage, and seven-day local backup retention.                  |
-| Virtual network                        | Separate delegated App Service, PostgreSQL, and Container Apps subnets with private PostgreSQL DNS.                                                                        |
-| Azure Key Vault                        | Holds externally seeded OpenWeather and database-password secrets; uses RBAC, purge protection, soft delete, and subnet-restricted access.                                 |
-| Log Analytics and Application Insights | Central telemetry workspace, workspace-based application insights, and diagnostic streams from App Service, PostgreSQL, Front Door, and Key Vault.                         |
+| Component                              | Purpose and configuration                                                                                                                                                                 |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Azure Front Door Standard              | Global HTTPS entry point with a non-cached `/api/*` route, compressed/cached static-content route, and active `www.nivbarweather.com` custom domain using Azure-managed TLS 1.2 or later. |
+| Azure Storage Static Website           | Hosts the React/Vite `dist` output; secure transfer and TLS 1.2 are required, shared public blob-container access is disabled, and `index.html` is the SPA error document.                |
+| Azure Container Registry               | Stores the backend image; Basic is the default, the admin account is disabled, and App Service pulls with managed identity.                                                               |
+| Container Apps migration environment   | Uses the dedicated `10.40.3.0/24` delegated subnet and a Consumption workload profile for the manual one-shot TypeORM job `azure-weather-prod-mig-d2cc26`.                                |
+| GitHub production deployment identity  | Uses a user-assigned identity and Environment-scoped OIDC federation; resource-scoped roles support the manual repository CD workflow without client secrets.                             |
+| Linux App Service                      | Runs the existing NestJS container on port 3000 in a P0v3 plan, with zone balancing, two baseline workers, and CPU autoscale through four.                                                |
+| PostgreSQL Flexible Server             | PostgreSQL 17 by default, General Purpose compute, zone-redundant HA, private network access, configurable storage, and seven-day local backup retention.                                 |
+| Virtual network                        | Separate delegated App Service, PostgreSQL, and Container Apps subnets with private PostgreSQL DNS.                                                                                       |
+| Azure Key Vault                        | Holds externally seeded OpenWeather and database-password secrets; uses RBAC, purge protection, soft delete, and subnet-restricted access.                                                |
+| Log Analytics and Application Insights | Central telemetry workspace, workspace-based application insights, and diagnostic streams from App Service, PostgreSQL, Front Door, and Key Vault.                                        |
 
 ## Traffic and data flow
 
-1. Global users connect to the generated Front Door endpoint over HTTPS.
+1. Global users connect to the canonical `https://www.nivbarweather.com` endpoint over HTTPS. The Azure-provided Front Door hostname remains enabled as a fallback.
 2. Front Door matches `/api/*` before the catch-all by Azure's most-specific route matching and forwards API requests over HTTPS to App Service without enabling route caching.
 3. Other paths go to the Storage static website origin. Front Door compression is enabled, while origin cache headers remain authoritative.
 4. App Service reaches PostgreSQL through its regional VNet integration. The server has public network access disabled, occupies a delegated subnet, and resolves through a private DNS zone linked to the VNet.
@@ -61,7 +61,11 @@ The SCM endpoint deliberately does not inherit that rule. It has its own deny-by
 
 The Storage static-website endpoint remains publicly reachable in the selected Standard design. Disabling that public endpoint would also make it unusable as a Standard origin. Front Door Premium with Private Link origins and a managed WAF policy is the stronger security option, at higher cost. Adopting it is a replacement architecture decision; Standard and Premium must not be deployed simultaneously.
 
-No custom domain, DNS record, or certificate is defined because no domain information was supplied.
+The custom-domain rollout used two review gates. Stage 1 created `www.nivbarweather.com` with an Azure-managed TLS 1.2-or-later certificate while the association switch remained off, exposing the DNS-validation data without changing either route. After Azure validated the domain and completed certificate deployment, Stage 2 enabled the untracked production association input. The single switch associated the hostname with both `/api/*` and `/*`; `link_to_default_domain = true` remained enabled on both routes.
+
+The canonical URL is `https://www.nivbarweather.com`. The original `https://azure-weather-prod-fd-d2cc26-epa4ddasghg4d8fr.z03.azurefd.net` endpoint is retained as the rollback and operational fallback. The architecture diagram is unchanged because the custom hostname terminates at the existing Front Door boundary rather than adding a traffic component.
+
+Namecheap DNS remains manual and outside Terraform. Its `www` CNAME targets `azure-weather-prod-fd-d2cc26-epa4ddasghg4d8fr.z03.azurefd.net`, and the `_dnsauth.www` TXT validation record must be retained. Microsoft Entra External ID is likewise manual: `https://www.nivbarweather.com/` was added as an SPA redirect without removing the localhost or original Front Door redirects. The repository `PRODUCTION_URL` now uses the canonical URL.
 
 ## Identity, RBAC, and secrets
 
@@ -84,7 +88,7 @@ The migration job has a dedicated user-assigned identity with only `AcrPull` at 
 
 The separate GitHub CD identity trusts only the immutable GitHub subject observed from the protected Environment: `repo:NivBar2000@262624074/Azure_weather_Project@1426703721:environment:production`. Its assignments are scoped to ACR (`AcrPush`), the backend App Service (`Website Contributor`), the frontend `$web` container (`Storage Blob Data Contributor`), the Front Door endpoint (`CDN Profile Contributor`), and the migration job (`Container Apps Jobs Contributor`). It has no direct Key Vault role, database output, Terraform-state permission, or broad subscription/resource-group role.
 
-The first CD run failed safely during OIDC authentication with `AADSTS700213`, before any deployment step, because the configured federated credential used GitHub's obsolete name-only subject form. Terraform now contains the observed immutable owner/repository-ID subject above; that correction still requires a separately reviewed targeted plan and apply before the CD retry.
+The first CD run failed safely during OIDC authentication with `AADSTS700213`, before any deployment step, because the configured federated credential used GitHub's obsolete name-only subject form. This is retained as historical failure context. After the reviewed immutable owner/repository-ID subject correction, a later manual Production CD run completed successfully using the custom production URL.
 
 Trust model 1 is an explicit accepted risk: job update/start permission allows the protected GitHub identity to make effective use of the migration job's database secret and attached identity, even though it cannot read Key Vault directly. Azure RBAC cannot constrain a job write to only the image field or disable execution overrides. Control of the backend image similarly makes this identity a trusted production release principal capable of running code with App Service runtime configuration. Required Environment reviewers are unavailable on the current private-repository plan; manual dispatch, exact original-actor, triggering-actor, and main-ref checks, the Environment-scoped OIDC subject, immutable image digests, workflow concurrency, minimal permissions, and sanitized logs are the compensating controls.
 
@@ -95,7 +99,8 @@ Terraform retains ownership of the complete project tag set except for the exter
 Terraform maps the existing NestJS configuration without changing application behavior:
 
 - `NODE_ENV=production`, `PORT=3000`, and `WEBSITES_PORT=3000`;
-- `FRONTEND_ORIGIN` set to the generated Front Door origin;
+- `FRONTEND_ORIGIN=https://www.nivbarweather.com` from the Front Door custom-domain resource;
+- `WEBSITES_ENABLE_APP_SERVICE_STORAGE=false`, because the container does not rely on persistent App Service filesystem storage;
 - OpenWeather and database password values resolved through Key Vault references;
 - private PostgreSQL FQDN, port 5432, administrator login, application database, and `DATABASE_SSL=true`;
 - the six environment-specific `ENTRA_*` settings, with `access_as_user` fixed as the required scope;
@@ -103,7 +108,7 @@ Terraform maps the existing NestJS configuration without changing application be
 
 Terraform does not override the production image command. The existing Docker `CMD` starts compiled Node directly as PID 1, without npm or a persistent shell wrapper. App Service instances do not run TypeORM migrations during startup; doing so would allow two to four instances to race on the same schema.
 
-Production migrations run through the Terraform-defined manual Container Apps Job before a new application version receives traffic. The job has parallelism one, one required completion, zero automatic retries, a bounded timeout, private database connectivity, and no schedule. The repository CD workflow updates only its image, starts exactly one execution without overrides, and gates App Service deployment on confirmed success. The job configuration still requires a separately reviewed Terraform apply and live validation before the first workflow run. Automatic migration startup remains specific to the local Docker Compose workflow.
+Production migrations run through the Terraform-defined manual Container Apps Job before a new application version receives traffic. The job has parallelism one, one required completion, zero automatic retries, a bounded timeout, private database connectivity, and no schedule. The repository CD workflow updates only its image, starts exactly one execution without overrides, and gates App Service deployment on confirmed success. A manual Production CD run completed successfully after the identity correction. Automatic migration startup remains specific to the local Docker Compose workflow.
 
 Terraform owns all non-image runtime configuration. CD owns only the App Service Docker image and migration-job container image, enforced by narrow lifecycle ignores for those two image fields rather than entire configuration blocks. CD additionally owns the uploaded frontend static content; Terraform owns the Storage account, static-website configuration, Front Door, identities, networking, and RBAC.
 
@@ -124,19 +129,19 @@ Exact prices are intentionally not stated because they vary by agreement, usage,
 
 Front Door Standard is the cost-focused selection. Premium adds stronger WAF and Private Link origin options at higher cost. ACR Basic is the default; ACR private endpoints require Premium and additional networking/private DNS. Storage uses LRS. PostgreSQL geo-redundant backup is off by default for cost control, while seven-day local point-in-time backups and zone-redundant HA remain enabled.
 
-## Manual CD prerequisites and deployment order
+## Manual CD deployment order
 
-Before the next human-triggered workflow run:
+For each future human-triggered workflow run:
 
 1. Verify the existing resource group, provider registrations, Sweden Central SKU/zone availability, subscription quotas, RBAC permissions, and a secured remote-state container.
 2. Review and supply non-committed variables, including a globally unique suffix, immutable image tag, PostgreSQL administrator password, and public Entra configuration.
-3. Initialize the remote backend and review a plan targeted only to `azurerm_federated_identity_credential.github_production`; apply the saved plan only after separate approval.
+3. Review any required infrastructure change as a separate Terraform plan/apply interaction before application deployment.
 4. Confirm the `production` GitHub Environment and every documented public repository variable without placing credentials in GitHub secrets or `VITE_*` values.
 5. Seed the two configured Key Vault secrets out of band without exposing their values in Terraform or logs.
 6. From GitHub Actions, manually select **Production CD**, choose `main`, verify the exact commit, and run it as `NivBar2000`.
 7. Review the sanitized summary and live evidence for the ACR digest, one migration execution, App Service health, frontend deployment, Front Door purge, and public smoke checks.
 
-The persistent migration and OIDC/RBAC foundations are represented in Terraform. The first CD attempt confirmed the GitHub Environment's immutable subject claim but failed safely at federation before deployment; the corrected federated credential remains pending reviewed deployment and retry. The separately maintained CD workflow owns immutable backend image build/push, the exactly-once migration gate, App Service image updates, frontend build/upload, Front Door purge, and post-deployment smoke tests. It has no Terraform-state or direct Key Vault access and does not run Terraform.
+The persistent migration and OIDC/RBAC foundations are represented in Terraform. The first CD attempt confirmed the GitHub Environment's immutable subject claim but failed safely at federation before deployment. The reviewed correction was subsequently deployed, and a manual Production CD run completed successfully against `https://www.nivbarweather.com`. The separately maintained workflow owns immutable backend image build/push, the exactly-once migration gate, App Service image updates, frontend build/upload, Front Door purge, and post-deployment smoke tests. It has no Terraform-state or direct Key Vault access and does not run Terraform.
 
 Failure boundaries are deliberate. Migration failure stops before App Service or frontend changes. Backend restart/health failure triggers a best-effort restore of the previous image, but a successful migration is never reversed automatically and schema compatibility is not guaranteed. Frontend uploads overwrite matching files but are not atomic; purge or smoke failure does not restore previous static content. Recovery after those points requires a separately authorized known-good release.
 
@@ -146,8 +151,6 @@ Failure boundaries are deliberate. Migration failure stops before App Service or
 - Any Azure CLI query or mutation and all resource provisioning.
 - Remote-state resource creation.
 - Secret values and secret seeding.
-- Applying and live-validating the persistent migration runner and GitHub OIDC/RBAC resources.
-- Entra changes, custom domains, certificates, and browser verification.
-- The first live GitHub CD run, alert destinations, distributed caching, Front Door Premium/Private Link/WAF, and ACR private endpoints.
+- Alert destinations, distributed caching, Front Door Premium/Private Link/WAF, and ACR private endpoints.
 
 Interaction 012 changes configuration and documentation only. It creates no Azure cost until a later authorized deployment applies it.

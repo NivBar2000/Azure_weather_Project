@@ -26,6 +26,17 @@ resource "azurerm_cdn_frontdoor_endpoint" "production" {
   }
 }
 
+resource "azurerm_cdn_frontdoor_custom_domain" "www" {
+  name                     = "www-nivbarweather-com"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.production.id
+  host_name                = "www.nivbarweather.com"
+
+  tls {
+    certificate_type = "ManagedCertificate"
+    minimum_version  = "TLS12"
+  }
+}
+
 resource "azurerm_cdn_frontdoor_origin_group" "frontend" {
   name                     = "frontend-static-site"
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.production.id
@@ -103,6 +114,9 @@ resource "azurerm_cdn_frontdoor_route" "api" {
   https_redirect_enabled        = true
   link_to_default_domain        = true
   enabled                       = true
+  cdn_frontdoor_custom_domain_ids = var.front_door_custom_domain_association_enabled ? [
+    azurerm_cdn_frontdoor_custom_domain.www.id,
+  ] : []
 }
 
 resource "azurerm_cdn_frontdoor_route" "frontend" {
@@ -116,6 +130,9 @@ resource "azurerm_cdn_frontdoor_route" "frontend" {
   https_redirect_enabled        = true
   link_to_default_domain        = true
   enabled                       = true
+  cdn_frontdoor_custom_domain_ids = var.front_door_custom_domain_association_enabled ? [
+    azurerm_cdn_frontdoor_custom_domain.www.id,
+  ] : []
 
   cache {
     query_string_caching_behavior = "UseQueryString"

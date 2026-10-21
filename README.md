@@ -106,6 +106,10 @@ The Terraform root module under `infra/terraform` defines the deployed Sweden Ce
 
 The production infrastructure, frontend, database migrations, backend, Microsoft Entra External ID authentication, and backend-only OpenWeather integration are operational. Human validation covered Google and Microsoft Account sign-in, city search and live forecasts, saved-forecast create/list/detail behavior, cross-user isolation with two identities, and sign-out. See [Azure infrastructure](docs/azure-infrastructure.md) for topology and security/cost decisions, [Azure deployment readiness](docs/azure-deployment-readiness.md) for deployment evidence and the controlled runbook, and the [Terraform README](infra/terraform/README.md) for safe placeholders and local validation.
 
+The canonical production URL is `https://www.nivbarweather.com`. Azure validated the custom domain, deployed its managed TLS certificate, and associated it with both the frontend `/*` and API `/api/*` Front Door routes. The original endpoint, `https://azure-weather-prod-fd-d2cc26-epa4ddasghg4d8fr.z03.azurefd.net`, remains enabled as the rollback and operational fallback.
+
+Namecheap DNS and Microsoft Entra External ID redirect URIs remain manually managed outside Terraform. The Namecheap `www` CNAME targets the retained Front Door endpoint, and the `_dnsauth.www` TXT validation record must be retained. Entra keeps the localhost and original Front Door redirects alongside `https://www.nivbarweather.com/`.
+
 Safe non-deploying validation:
 
 ```bash
@@ -228,7 +232,7 @@ The ordered release is: build and push a full-commit-SHA backend tag, verify its
 
 The workflow expects public repository variables only: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `ACR_NAME`, `ACR_LOGIN_SERVER`, `BACKEND_IMAGE_REPOSITORY`, `MIGRATION_JOB_NAME`, `BACKEND_APP_NAME`, `FRONTEND_STORAGE_ACCOUNT`, `FRONT_DOOR_PROFILE`, `FRONT_DOOR_ENDPOINT`, `PRODUCTION_URL`, `VITE_API_BASE_URL`, `VITE_ENTRA_CLIENT_ID`, `VITE_ENTRA_AUTHORITY`, `VITE_ENTRA_KNOWN_AUTHORITY`, and `VITE_ENTRA_API_SCOPE`. Never place a credential, client secret, storage key, SAS token, OpenWeather key, database password, or access token in those variables.
 
-To start a deployment, open **Actions**, select **Production CD**, choose **Run workflow**, select `main`, and confirm the commit before running it. The private-repository GitHub plan does not provide required Environment reviewers, so manual dispatch, exact original-actor, triggering-actor, and ref checks, the `production` Environment boundary, OIDC subject restriction, immutable digest deployment, and non-cancelling concurrency are the compensating controls. The first run failed safely at OIDC authentication before deployment and exposed the immutable subject needed by Azure federation. After the reviewed Terraform credential correction, the retry remains the live validation of OIDC/RBAC propagation, migration execution, Front Door purge scope, and production health.
+To start a deployment, open **Actions**, select **Production CD**, choose **Run workflow**, select `main`, and confirm the commit before running it. The private-repository GitHub plan does not provide required Environment reviewers, so manual dispatch, exact original-actor, triggering-actor, and ref checks, the `production` Environment boundary, OIDC subject restriction, immutable digest deployment, and non-cancelling concurrency are the compensating controls. Historically, the first run failed safely at OIDC authentication before deployment and exposed the immutable subject needed by Azure federation. After the reviewed credential correction, a later manual Production CD run completed successfully using `https://www.nivbarweather.com` through the `PRODUCTION_URL` repository variable.
 
 ## Implementation status
 
@@ -247,9 +251,8 @@ To start a deployment, open **Actions**, select **Production CD**, choose **Run 
 - Operational Azure production infrastructure, frontend, private database, backend, authentication, and OpenWeather flow
 - GitHub Actions CI for application, backend-container, dependency-audit, and Terraform validation
 - Manual GitHub Actions production CD with OIDC, digest-qualified backend deployment, ordered migration gate, frontend upload, purge, health checks, and bounded smoke checks
+- Canonical `https://www.nivbarweather.com` production hostname with managed TLS, both Front Door routes, retained Front Door fallback, and completed production CD/browser validation
 
 ### Deferred
 
-- Applying and live-validating the Terraform-defined persistent migration runner and GitHub OIDC/RBAC foundation
-- First human-triggered production CD run and live workflow validation
 - Distributed caching

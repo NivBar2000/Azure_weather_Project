@@ -21,6 +21,9 @@ entra_allowed_client_id = "00000000-0000-4000-8000-000000000000"
 entra_oidc_metadata_url = "https://replace-with-ciam-host.example/replace-with-tenant-id/v2.0/.well-known/openid-configuration"
 entra_expected_issuer   = "https://replace-with-issuer.example/replace-with-tenant-id/v2.0"
 
+# Keep false for Stage 1. Set true only after DNS validation and certificate issuance.
+front_door_custom_domain_association_enabled = false
+
 tags = {
   owner       = "replace-with-team-name"
   cost-center = "replace-with-cost-center"

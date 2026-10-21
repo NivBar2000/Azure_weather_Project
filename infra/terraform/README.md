@@ -12,9 +12,9 @@ This root module represents the approved Azure production architecture now deplo
 - Separate migration-job and GitHub CD user-assigned identities, with GitHub OIDC restricted to the repository's protected `production` Environment.
 - Premium v3 Linux App Service with two baseline workers, zone balancing, CPU autoscale from two through four, regional VNet integration, health checks, and hardened TLS/FTP settings.
 - RBAC-enabled Key Vault with purge protection, subnet-restricted access, and least-privilege secret-read access for the App Service identity.
-- Azure Storage Static Website, Front Door Standard routes, Log Analytics, Application Insights, and focused diagnostic settings.
+- Azure Storage Static Website, Front Door Standard routes, the active `www.nivbarweather.com` custom domain with an Azure-managed TLS 1.2-or-later certificate, Log Analytics, Application Insights, and focused diagnostic settings.
 
-Terraform intentionally does not create Key Vault secret values, upload frontend files, build or push the backend image, create or configure the GitHub Environment/workflow, configure Entra External ID, create a custom domain/certificate, create alert notification destinations, or provision the existing resource group/state backend. The repository CD workflow is maintained separately in `.github/workflows/cd.yml`.
+Terraform intentionally does not create Key Vault secret values, upload frontend files, build or push the backend image, create or configure the GitHub Environment/workflow, configure Entra External ID, manage public DNS records, create alert notification destinations, or provision the existing resource group/state backend. The repository CD workflow is maintained separately in `.github/workflows/cd.yml`.
 
 ## Required operator inputs
 
@@ -57,7 +57,7 @@ Before an authorized deployment:
 7. Build the frontend with the approved public Entra settings and upload `apps/frontend/dist` to the storage account's `$web` container using Entra data-plane authentication.
 8. Purge the Front Door endpoint if stale content requires it, then run health, routing, authentication, and application checks.
 
-The initial image push, one-shot production migration, secret seeding, frontend build/upload, and Entra updates were completed through separately reviewed manual deployment interactions. The deployed infrastructure, frontend, database schema, backend, authentication, and OpenWeather flow are operational. The repository contains a manual-only CD workflow with exact original-actor, triggering-actor, and `main`-ref checks. Its first run failed safely during OIDC authentication, before deployment, because the deployed federated credential expected an obsolete name-only subject. Terraform now defines the observed immutable subject correction; it requires a reviewed targeted plan/apply before the CD retry. Compose retains its local-only migration startup behavior. Terraform state does not contain application build artifacts.
+The initial image push, one-shot production migration, secret seeding, frontend build/upload, and Entra updates were completed through separately reviewed manual deployment interactions. The deployed infrastructure, frontend, database schema, backend, authentication, and OpenWeather flow are operational. The repository contains a manual-only CD workflow with exact original-actor, triggering-actor, and `main`-ref checks. Its first run failed safely during OIDC authentication, before deployment, because the deployed federated credential expected an obsolete name-only subject. That failure is historical: after the reviewed subject correction, a later manual Production CD run completed successfully using `https://www.nivbarweather.com`. Compose retains its local-only migration startup behavior. Terraform state does not contain application build artifacts.
 
 ## CD identity, trust boundary, and image ownership
 
@@ -85,7 +85,24 @@ The AzureRM provider sets `storage_use_azuread = true` so its Storage Blob/Queue
 
 Front Door creates `/api/*` and `/*` routes on one Standard profile. Azure Front Door uses the more-specific `/api/*` match for the App Service; the API route omits a cache block, so API responses are not cached. The catch-all frontend route enables compression and honors origin caching semantics for static content. Both routes redirect HTTP to HTTPS and forward to their origins over HTTPS.
 
-The Front Door profile and endpoint are independent of the origins. App Service then consumes the endpoint hostname as `FRONTEND_ORIGIN` and the profile `resource_guid` in its access rule. Origins/routes depend on App Service and Storage afterward. This ordering avoids a Terraform dependency cycle.
+The Front Door profile, endpoint, and custom-domain resource are independent of the origins. App Service consumes `https://www.nivbarweather.com` from the custom-domain resource as `FRONTEND_ORIGIN` and the profile `resource_guid` in its access rule. Origins/routes depend on App Service and Storage afterward. This ordering avoids a Terraform dependency cycle. Terraform also explicitly sets `WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"` because the backend container does not depend on persistent App Service filesystem storage.
+
+## Completed staged custom-domain rollout
+
+Terraform defines `www.nivbarweather.com` as an Azure Front Door custom domain with an Azure-managed certificate and `TLS12` as the minimum TLS version. Stage 1 created the domain while `front_door_custom_domain_association_enabled=false`, exposed Azure's DNS-validation token, and left both routes on the Azure-provided endpoint. After Azure validated the domain and completed managed-certificate deployment, Stage 2 enabled the production input. The single switch associated the custom domain with both `/api/*` and `/*`; partial association is not supported by this module.
+
+The canonical production URL is now `https://www.nivbarweather.com`. Both routes retain `link_to_default_domain = true`, so `https://azure-weather-prod-fd-d2cc26-epa4ddasghg4d8fr.z03.azurefd.net` remains the rollback and operational fallback.
+
+Namecheap remains manually managed outside Terraform:
+
+| Type  | Namecheap Host | Value/Target                                                    | TTL       |
+| ----- | -------------- | --------------------------------------------------------------- | --------- |
+| TXT   | `_dnsauth.www` | Azure's validation token, retained after validation             | Automatic |
+| CNAME | `www`          | `azure-weather-prod-fd-d2cc26-epa4ddasghg4d8fr.z03.azurefd.net` | Automatic |
+
+Do not delete the `_dnsauth.www` TXT record. Microsoft Entra External ID is also managed outside Terraform: `https://www.nivbarweather.com/` was added as an SPA redirect while the localhost and original Front Door redirects were preserved. The GitHub repository variable `PRODUCTION_URL` now uses the canonical URL. A manual Production CD run and human checks of HTTPS, frontend loading, `/api/health`, authentication redirect, city search, forecast saving, and saved-forecast loading completed successfully.
+
+Rollback remains explicit and non-destructive: keep the default Front Door hostname linked to both routes, direct operational access back to that fallback if the custom hostname has a problem, and treat any Namecheap or Entra rollback as a separately authorized manual change. Terraform does not manage either external system.
 
 App Service allows its main endpoint only from the `AzureFrontDoor.Backend` service tag when `X-Azure-FDID` matches the created profile GUID. Unmatched requests are denied. The SCM endpoint has a separate deny-by-default policy; it does not copy the Front Door rule. Front Door Standard cannot connect to these origins through Private Link, so the App Service still has a public endpoint protected by restrictions and the Storage static-website endpoint remains publicly reachable.
 
@@ -101,4 +118,4 @@ PostgreSQL has no public network access. App Service resolves its private FQDN t
 - Diagnostic ingestion and retention generate usage costs. No alerts are created because no notification destination was provided.
 - The workload-profiles Container Apps environment and migration executions can add environment, networking, execution, and Log Analytics usage charges. The dedicated `/24` also consumes VNet address space permanently.
 
-See [Azure infrastructure](../../docs/azure-infrastructure.md) for the complete architecture, operational prerequisites, limitations, and deferred work. Interaction 012 created the original configuration without deploying it; Interaction 021 extends the configuration but likewise performs no Azure mutation.
+See [Azure infrastructure](../../docs/azure-infrastructure.md) for the complete architecture, operational prerequisites, limitations, and deferred work. Interaction 012 created the original configuration without deploying it, Interaction 021 extended the configuration, and Interactions 029 and 030 document the staged custom-domain rollout and completed cutover.

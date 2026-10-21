@@ -66,7 +66,7 @@ resource "azurerm_linux_web_app" "backend" {
     NODE_ENV                              = "production"
     PORT                                  = "3000"
     WEBSITES_PORT                         = "3000"
-    FRONTEND_ORIGIN                       = local.front_door_origin
+    FRONTEND_ORIGIN                       = "https://${azurerm_cdn_frontdoor_custom_domain.www.host_name}"
     OPENWEATHER_API_KEY                   = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault.production.vault_uri}secrets/${var.openweather_secret_name})"
     DATABASE_HOST                         = azurerm_postgresql_flexible_server.production.fqdn
     DATABASE_PORT                         = "5432"
@@ -81,6 +81,7 @@ resource "azurerm_linux_web_app" "backend" {
     ENTRA_EXPECTED_ISSUER                 = var.entra_expected_issuer
     ENTRA_REQUIRED_SCOPE                  = var.entra_required_scope
     APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.backend.connection_string
+    WEBSITES_ENABLE_APP_SERVICE_STORAGE   = "false"
   }
 
   lifecycle {
