@@ -1,0 +1,494 @@
+name: Production CD
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment-${{ github.repository }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  authorize:
+    name: Authorize production deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      DEPLOYMENT_ACTOR: ${{ github.actor }}
+      DEPLOYMENT_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      DEPLOYMENT_REF: ${{ github.ref }}
+    steps:
+      - name: Enforce actor and branch restrictions
+        run: |
+          if [[ "$DEPLOYMENT_REF" != "refs/heads/main" ]]; then
+            echo "Production deployment is permitted only from refs/heads/main." >&2
+            exit 1
+          fi
+
+          if [[ "$DEPLOYMENT_ACTOR" != "NivBar2000" ]]; then
+            echo "Production deployment is permitted only for the authorized actor." >&2
+            exit 1
+          fi
+
+          if [[ "$DEPLOYMENT_TRIGGERING_ACTOR" != "NivBar2000" ]]; then
+            echo "Production deployment re-runs are permitted only for the authorized triggering actor." >&2
+            exit 1
+          fi
+
+  application:
+    name: Validate application
+    needs: authorize
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Configure Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint workspaces
+        run: npm run lint
+
+      - name: Test workspaces
+        run: npm test
+
+      - name: Build workspaces
+        run: npm run build
+
+  deploy:
+    name: Deploy production
+    needs: application
+    if: >-
+      ${{ needs.application.result == 'success' &&
+          github.ref == 'refs/heads/main' &&
+          github.actor == 'NivBar2000' &&
+          github.triggering_actor == 'NivBar2000' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+      BACKEND_IMAGE_REPOSITORY: ${{ vars.BACKEND_IMAGE_REPOSITORY }}
+      MIGRATION_JOB_NAME: ${{ vars.MIGRATION_JOB_NAME }}
+      BACKEND_APP_NAME: ${{ vars.BACKEND_APP_NAME }}
+      FRONTEND_STORAGE_ACCOUNT: ${{ vars.FRONTEND_STORAGE_ACCOUNT }}
+      FRONT_DOOR_PROFILE: ${{ vars.FRONT_DOOR_PROFILE }}
+      FRONT_DOOR_ENDPOINT: ${{ vars.FRONT_DOOR_ENDPOINT }}
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      VITE_ENTRA_CLIENT_ID: ${{ vars.VITE_ENTRA_CLIENT_ID }}
+      VITE_ENTRA_AUTHORITY: ${{ vars.VITE_ENTRA_AUTHORITY }}
+      VITE_ENTRA_KNOWN_AUTHORITY: ${{ vars.VITE_ENTRA_KNOWN_AUTHORITY }}
+      VITE_ENTRA_API_SCOPE: ${{ vars.VITE_ENTRA_API_SCOPE }}
+      COMMIT_SHA: ${{ github.sha }}
+      BACKEND_DIGEST: not-resolved
+      MIGRATION_RESULT: not-run
+      BACKEND_RESULT: not-run
+      FRONTEND_RESULT: not-run
+      PURGE_RESULT: not-run
+      SMOKE_RESULT: not-run
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Validate required repository variables
+        run: |
+          required_variables=(
+            AZURE_CLIENT_ID
+            AZURE_TENANT_ID
+            AZURE_SUBSCRIPTION_ID
+            AZURE_RESOURCE_GROUP
+            ACR_NAME
+            ACR_LOGIN_SERVER
+            BACKEND_IMAGE_REPOSITORY
+            MIGRATION_JOB_NAME
+            BACKEND_APP_NAME
+            FRONTEND_STORAGE_ACCOUNT
+            FRONT_DOOR_PROFILE
+            FRONT_DOOR_ENDPOINT
+            PRODUCTION_URL
+            VITE_API_BASE_URL
+            VITE_ENTRA_CLIENT_ID
+            VITE_ENTRA_AUTHORITY
+            VITE_ENTRA_KNOWN_AUTHORITY
+            VITE_ENTRA_API_SCOPE
+          )
+          missing_variables=()
+
+          for variable_name in "${required_variables[@]}"; do
+            if [[ -z "${!variable_name:-}" ]]; then
+              missing_variables+=("$variable_name")
+            fi
+          done
+
+          if (( ${#missing_variables[@]} > 0 )); then
+            printf 'Missing required repository variable: %s\n' "${missing_variables[@]}" >&2
+            exit 1
+          fi
+
+          if [[ ! "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The workflow commit is not a full Git SHA." >&2
+            exit 1
+          fi
+
+          if [[ "$PRODUCTION_URL" != https://* ]]; then
+            echo "PRODUCTION_URL must use HTTPS." >&2
+            exit 1
+          fi
+
+          if [[ "$ACR_LOGIN_SERVER" != *.azurecr.io ]]; then
+            echo "ACR_LOGIN_SERVER must be an Azure Container Registry login server." >&2
+            exit 1
+          fi
+
+      - name: Authenticate to Azure with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install deployment build dependencies
+        run: npm ci
+
+      - name: Build and push immutable backend image
+        run: |
+          tagged_image="$ACR_LOGIN_SERVER/$BACKEND_IMAGE_REPOSITORY:$COMMIT_SHA"
+
+          docker build \
+            --file apps/backend/Dockerfile \
+            --tag "$tagged_image" \
+            .
+
+          az acr login \
+            --name "$ACR_NAME" \
+            --only-show-errors \
+            --output none
+          docker push "$tagged_image"
+
+          digest="$(az acr manifest show-metadata \
+            --registry "$ACR_NAME" \
+            --name "$BACKEND_IMAGE_REPOSITORY:$COMMIT_SHA" \
+            --query digest \
+            --output tsv \
+            --only-show-errors)"
+
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "ACR did not return a valid manifest digest." >&2
+            exit 1
+          fi
+
+          expected_reference="$ACR_LOGIN_SERVER/$BACKEND_IMAGE_REPOSITORY@$digest"
+          pushed_reference="$(docker image inspect \
+            --format '{{index .RepoDigests 0}}' \
+            "$tagged_image")"
+
+          if [[ "$pushed_reference" != "$expected_reference" ]]; then
+            echo "The local push result does not match the verified ACR digest." >&2
+            exit 1
+          fi
+
+          printf 'BACKEND_IMAGE=%s\n' "$expected_reference" >> "$GITHUB_ENV"
+          printf 'BACKEND_DIGEST=%s\n' "$digest" >> "$GITHUB_ENV"
+
+      - name: Update migration job image
+        run: |
+          az containerapp job update \
+            --name "$MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --container-name database-migration \
+            --image "$BACKEND_IMAGE" \
+            --only-show-errors \
+            --output none
+
+      - name: Run exactly one migration execution
+        run: |
+          execution_name="$(az containerapp job start \
+            --name "$MIGRATION_JOB_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query name \
+            --output tsv \
+            --only-show-errors)"
+
+          if [[ -z "$execution_name" || "$execution_name" == "null" ]]; then
+            echo "The migration start operation did not return an execution name." >&2
+            printf 'MIGRATION_RESULT=%s\n' failed-to-start >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+          for attempt in {1..80}; do
+            status="$(az containerapp job execution show \
+              --name "$MIGRATION_JOB_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --job-execution-name "$execution_name" \
+              --query properties.status \
+              --output tsv \
+              --only-show-errors)"
+
+            case "$status" in
+              Succeeded)
+                printf 'MIGRATION_RESULT=%s\n' succeeded >> "$GITHUB_ENV"
+                exit 0
+                ;;
+              Failed|Canceled|Cancelled|Stopped|Degraded)
+                echo "Migration execution ended with status: $status" >&2
+                printf 'MIGRATION_RESULT=%s\n' failed >> "$GITHUB_ENV"
+                exit 1
+                ;;
+              Running|Processing|Unknown|"")
+                ;;
+              *)
+                echo "Migration execution returned an unrecognized status." >&2
+                printf 'MIGRATION_RESULT=%s\n' unknown-status >> "$GITHUB_ENV"
+                exit 1
+                ;;
+            esac
+
+            sleep 15
+          done
+
+          echo "Migration execution exceeded the 20-minute polling limit." >&2
+          printf 'MIGRATION_RESULT=%s\n' timed-out >> "$GITHUB_ENV"
+          exit 1
+
+      - name: Deploy backend and verify health
+        run: |
+          previous_image="$(az webapp config container show \
+            --name "$BACKEND_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "[?name=='DOCKER_CUSTOM_IMAGE_NAME'].value | [0]" \
+            --output tsv \
+            --only-show-errors)"
+
+          if [[ -z "$previous_image" || "$previous_image" == "null" ]]; then
+            echo "The previously configured backend image could not be determined." >&2
+            printf 'BACKEND_RESULT=%s\n' previous-image-unavailable >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+          rollback_backend() {
+            local rollback_result=failed
+            set +e
+            az webapp config container set \
+              --name "$BACKEND_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --container-image-name "$previous_image" \
+              --only-show-errors \
+              --output none
+            local set_status=$?
+            az webapp restart \
+              --name "$BACKEND_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --only-show-errors \
+              --output none
+            local restart_status=$?
+            set -e
+
+            if (( set_status == 0 && restart_status == 0 )); then
+              rollback_result=succeeded
+            fi
+            printf '%s' "$rollback_result"
+          }
+
+          if ! az webapp config container set \
+            --name "$BACKEND_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --container-image-name "$BACKEND_IMAGE" \
+            --only-show-errors \
+            --output none; then
+            echo "App Service rejected the backend image update." >&2
+            printf 'BACKEND_RESULT=%s\n' update-failed >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+          if ! az webapp restart \
+            --name "$BACKEND_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --only-show-errors \
+            --output none; then
+            rollback_result="$(rollback_backend)"
+            echo "App Service restart failed; best-effort rollback: $rollback_result." >&2
+            printf 'BACKEND_RESULT=restart-failed-rollback-%s\n' "$rollback_result" >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+          health_url="${PRODUCTION_URL%/}/api/health"
+          for attempt in {1..20}; do
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              --output /dev/null \
+              --connect-timeout 5 \
+              --max-time 15 \
+              "$health_url"; then
+              printf 'BACKEND_RESULT=%s\n' healthy >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 15
+          done
+
+          rollback_result="$(rollback_backend)"
+          echo "Backend health failed; best-effort rollback: $rollback_result." >&2
+          printf 'BACKEND_RESULT=health-failed-rollback-%s\n' "$rollback_result" >> "$GITHUB_ENV"
+          exit 1
+
+      - name: Build production frontend
+        run: npm run build --workspace=@azure-weather/frontend
+
+      - name: Upload frontend with Entra authentication
+        run: |
+          mime_type() {
+            case "${1,,}" in
+              *.html) printf '%s' 'text/html' ;;
+              *.css) printf '%s' 'text/css' ;;
+              *.js|*.mjs) printf '%s' 'text/javascript' ;;
+              *.json|*.map) printf '%s' 'application/json' ;;
+              *.webmanifest) printf '%s' 'application/manifest+json' ;;
+              *.svg) printf '%s' 'image/svg+xml' ;;
+              *.png) printf '%s' 'image/png' ;;
+              *.jpg|*.jpeg) printf '%s' 'image/jpeg' ;;
+              *.gif) printf '%s' 'image/gif' ;;
+              *.webp) printf '%s' 'image/webp' ;;
+              *.ico) printf '%s' 'image/x-icon' ;;
+              *.woff) printf '%s' 'font/woff' ;;
+              *.woff2) printf '%s' 'font/woff2' ;;
+              *.txt) printf '%s' 'text/plain' ;;
+              *.xml) printf '%s' 'application/xml' ;;
+              *) printf '%s' 'application/octet-stream' ;;
+            esac
+          }
+
+          uploaded_files=0
+          while IFS= read -r -d '' file_path; do
+            blob_name="${file_path#apps/frontend/dist/}"
+            content_type="$(mime_type "$file_path")"
+
+            az storage blob upload \
+              --account-name "$FRONTEND_STORAGE_ACCOUNT" \
+              --auth-mode login \
+              --container-name '$web' \
+              --name "$blob_name" \
+              --file "$file_path" \
+              --content-type "$content_type" \
+              --overwrite true \
+              --no-progress \
+              --only-show-errors \
+              --output none
+            uploaded_files=$((uploaded_files + 1))
+          done < <(find apps/frontend/dist -type f -print0)
+
+          if (( uploaded_files == 0 )); then
+            echo "The frontend build produced no files to upload." >&2
+            exit 1
+          fi
+
+          printf 'FRONTEND_RESULT=%s\n' deployed >> "$GITHUB_ENV"
+
+      - name: Purge Front Door
+        run: |
+          az afd endpoint purge \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --profile-name "$FRONT_DOOR_PROFILE" \
+            --endpoint-name "$FRONT_DOOR_ENDPOINT" \
+            --content-paths '/*' \
+            --only-show-errors \
+            --output none
+          printf 'PURGE_RESULT=%s\n' succeeded >> "$GITHUB_ENV"
+
+      - name: Run production smoke checks
+        run: |
+          check_url() {
+            local url="$1"
+            for attempt in {1..12}; do
+              if curl \
+                --fail \
+                --silent \
+                --show-error \
+                --output /dev/null \
+                --connect-timeout 5 \
+                --max-time 15 \
+                "$url"; then
+                return 0
+              fi
+              sleep 10
+            done
+            return 1
+          }
+
+          production_base="${PRODUCTION_URL%/}"
+          if ! check_url "$production_base/"; then
+            echo "Production frontend smoke check failed." >&2
+            printf 'SMOKE_RESULT=%s\n' frontend-failed >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+          if ! check_url "$production_base/api/health"; then
+            echo "Production API health smoke check failed." >&2
+            printf 'SMOKE_RESULT=%s\n' api-health-failed >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+          printf 'SMOKE_RESULT=%s\n' succeeded >> "$GITHUB_ENV"
+
+      - name: Write sanitized deployment summary
+        if: always()
+        run: |
+          {
+            echo "## Production deployment"
+            echo
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            printf '| Commit | `%s` |\n' "$COMMIT_SHA"
+            printf '| Backend digest | `%s` |\n' "$BACKEND_DIGEST"
+            printf '| Migration | %s |\n' "$MIGRATION_RESULT"
+            printf '| Backend | %s |\n' "$BACKEND_RESULT"
+            printf '| Frontend | %s |\n' "$FRONTEND_RESULT"
+            printf '| Front Door purge | %s |\n' "$PURGE_RESULT"
+            printf '| Smoke tests | %s |\n' "$SMOKE_RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove ephemeral registry authentication
+        if: always()
+        continue-on-error: true
+        run: docker logout "$ACR_LOGIN_SERVER"

@@ -218,6 +218,16 @@ Use `npm run format:check` to verify formatting without changing files.
 
 The GitHub Actions workflow at `.github/workflows/ci.yml` runs on pull requests to `main`, pushes to `main`, and manual dispatch. Its parallel jobs validate the application, build the backend container locally, and format/validate Terraform without deployment credentials, artifact publishing, registry pushes, Azure access, or CD.
 
+## Production deployment workflow
+
+The manual-only workflow at `.github/workflows/cd.yml` validates the application and then deploys one reviewed `main` commit through the GitHub `production` Environment. It accepts only `workflow_dispatch` runs whose original actor and current triggering actor are both `NivBar2000`, including re-runs, allows only one active production deployment, and authenticates to Azure with OIDC using public repository variables rather than client secrets.
+
+The ordered release is: build and push a full-commit-SHA backend tag, verify its ACR digest, update and run exactly one migration execution, deploy that same digest to App Service, require `GET /api/health`, build and upload the frontend to `$web` with Entra authentication and explicit content types, purge Front Door, and run bounded frontend/API smoke checks. Terraform continues to own infrastructure and all non-image runtime configuration; CD owns backend and migration image revisions plus static frontend content.
+
+The workflow expects public repository variables only: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `ACR_NAME`, `ACR_LOGIN_SERVER`, `BACKEND_IMAGE_REPOSITORY`, `MIGRATION_JOB_NAME`, `BACKEND_APP_NAME`, `FRONTEND_STORAGE_ACCOUNT`, `FRONT_DOOR_PROFILE`, `FRONT_DOOR_ENDPOINT`, `PRODUCTION_URL`, `VITE_API_BASE_URL`, `VITE_ENTRA_CLIENT_ID`, `VITE_ENTRA_AUTHORITY`, `VITE_ENTRA_KNOWN_AUTHORITY`, and `VITE_ENTRA_API_SCOPE`. Never place a credential, client secret, storage key, SAS token, OpenWeather key, database password, or access token in those variables.
+
+To start a deployment, open **Actions**, select **Production CD**, choose **Run workflow**, select `main`, and confirm the commit before running it. The private-repository GitHub plan does not provide required Environment reviewers, so manual dispatch, exact original-actor, triggering-actor, and ref checks, the `production` Environment boundary, OIDC subject restriction, immutable digest deployment, and non-cancelling concurrency are the compensating controls. The first run remains a human-reviewed live validation of repository variables, OIDC/RBAC propagation, migration execution, Front Door purge scope, and production health.
+
 ## Implementation status
 
 ### Implemented
@@ -233,9 +243,10 @@ The GitHub Actions workflow at `.github/workflows/ci.yml` runs on pull requests 
 - Production Azure Terraform configuration and operating documentation
 - Operational Azure production infrastructure, frontend, private database, backend, authentication, and OpenWeather flow
 - GitHub Actions CI for application, backend-container, dependency-audit, and Terraform validation
+- Manual GitHub Actions production CD with OIDC, digest-qualified backend deployment, ordered migration gate, frontend upload, purge, health checks, and bounded smoke checks
 
 ### Deferred
 
-- Continuous deployment (CD)
-- A persistent, controlled production migration runner
+- Applying and live-validating the Terraform-defined persistent migration runner and GitHub OIDC/RBAC foundation
+- First human-triggered production CD run and live workflow validation
 - Distributed caching

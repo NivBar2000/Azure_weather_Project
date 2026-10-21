@@ -6,25 +6,27 @@ This document records the initial production deployment outcome and retains the 
 
 > **Historical context:** Interaction 013 performed no Azure deployment. Later reviewed interactions provisioned the infrastructure, deployed the artifacts, seeded secrets, configured Entra, and ran the initial production migrations.
 
-The Sweden Central infrastructure, frontend, database migrations, backend, Microsoft Entra External ID authentication, and backend-only OpenWeather integration are operational. Human browser validation on 2026-10-21 succeeded for Google and Microsoft Account sign-in, city search and live forecasts, saved-forecast create/list/detail behavior, isolation between two identities, and sign-out. Repository validation CI is implemented; CD and a persistent production migration runner remain deferred. Future changes must continue to use the stop/go gates below and retain human approval evidence.
+The Sweden Central infrastructure, frontend, database migrations, backend, Microsoft Entra External ID authentication, and backend-only OpenWeather integration are operational. Human browser validation on 2026-10-21 succeeded for Google and Microsoft Account sign-in, city search and live forecasts, saved-forecast create/list/detail behavior, isolation between two identities, and sign-out. Repository validation CI and the manual production CD workflow are implemented. Terraform now defines—but has not deployed—the persistent migration job and GitHub OIDC/RBAC foundation, and the first CD run remains pending. Future changes must continue to use the stop/go gates below and retain human approval evidence.
 
 ## Readiness findings and blockers
 
 The initial controlled production deployment is complete, but the repository is not ready for an unattended production release.
 
-| Finding                                                          | Current status                                                                                                           | Required disposition for future changes                                                                                  |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Terraform configuration                                          | Deployed and retained as the reviewable infrastructure definition                                                        | Revalidate from the approved release environment before each infrastructure change.                                      |
-| Azure tenant, subscription, providers, quotas, and regional SKUs | Verified during the reviewed manual deployment                                                                           | Recheck time-sensitive capacity, quota, provider, and authorization conditions before a future change.                   |
-| Cost estimate and ownership                                      | Deployment completed; ongoing cost governance remains an operational responsibility                                      | Refresh estimates and approval when a future change affects cost.                                                        |
-| Remote state                                                     | Production deployment used the approved secured state workflow; real backend details remain uncommitted                  | Preserve access, locking, recovery, and evidence controls for every Terraform operation.                                 |
-| Backend image                                                    | Immutable backend image deployed through ACR; managed-identity pull is operational                                       | Build, scan, retain, and promote future immutable artifacts through a reviewed manual process until CI/CD exists.        |
-| Key Vault secrets                                                | Versionless database and OpenWeather references resolve; temporary human access used during reconciliation was removed   | Continue out-of-band, least-privilege secret maintenance and refresh references after rotation when required.            |
-| Production migrations                                            | Initial migrations completed once through a temporary private runner; App Service does not run migrations at startup     | Implement a persistent controlled runner; until then, approve and clean up a temporary one-shot runner for each release. |
-| Frontend                                                         | Reviewed static build is deployed to Storage and served through Front Door                                               | Retain build provenance and use Azure AD data-plane upload authorization for future releases.                            |
-| Entra production redirects and providers                         | Production redirect/sign-out behavior, Google sign-in, and Microsoft Account sign-in were human-validated                | Keep External ID changes separately authorized and repeat human authentication checks after relevant changes.            |
-| OpenWeather                                                      | Backend-only integration is operational after the active key was validated and only `openweather-api-key` was reconciled | Never expose the key to frontend assets or logs; use Key Vault and remove temporary access after maintenance.            |
-| CI and CD                                                        | Validation-only GitHub Actions CI is implemented; CD is deferred                                                         | Manual controlled deployment remains gated until release automation receives separate review.                            |
+| Finding                                                          | Current status                                                                                                                                                             | Required disposition for future changes                                                                                      |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Terraform configuration                                          | Deployed and retained as the reviewable infrastructure definition                                                                                                          | Revalidate from the approved release environment before each infrastructure change.                                          |
+| Azure tenant, subscription, providers, quotas, and regional SKUs | Verified during the reviewed manual deployment                                                                                                                             | Recheck time-sensitive capacity, quota, provider, and authorization conditions before a future change.                       |
+| Cost estimate and ownership                                      | Deployment completed; ongoing cost governance remains an operational responsibility                                                                                        | Refresh estimates and approval when a future change affects cost.                                                            |
+| Remote state                                                     | Production deployment used the approved secured state workflow; real backend details remain uncommitted                                                                    | Preserve access, locking, recovery, and evidence controls for every Terraform operation.                                     |
+| Backend image                                                    | Immutable backend image deployed through ACR; managed-identity pull is operational                                                                                         | Build, scan, retain, and promote future immutable artifacts through a reviewed manual process until CI/CD exists.            |
+| Key Vault secrets                                                | Versionless database and OpenWeather references resolve; temporary human access used during reconciliation was removed                                                     | Continue out-of-band, least-privilege secret maintenance and refresh references after rotation when required.                |
+| Production migrations                                            | Initial migrations completed through a temporary runner; the persistent manual Container Apps Job `azure-weather-prod-mig-d2cc26` is defined in Terraform but not deployed | Review/apply the foundation, validate private connectivity and secret resolution, and retain a strict single-execution gate. |
+| Frontend                                                         | Reviewed static build is deployed to Storage and served through Front Door                                                                                                 | Retain build provenance and use Azure AD data-plane upload authorization for future releases.                                |
+| Entra production redirects and providers                         | Production redirect/sign-out behavior, Google sign-in, and Microsoft Account sign-in were human-validated                                                                  | Keep External ID changes separately authorized and repeat human authentication checks after relevant changes.                |
+| OpenWeather                                                      | Backend-only integration is operational after the active key was validated and only `openweather-api-key` was reconciled                                                   | Never expose the key to frontend assets or logs; use Key Vault and remove temporary access after maintenance.                |
+| CI and CD                                                        | Validation CI and a manual-only production CD workflow exist; GitHub OIDC identity, migration job, and resource-scoped roles are defined but not yet live-validated        | Apply only after plan approval, verify the `production` Environment/variables, then human-trigger the first CD run.          |
+
+Terraform ignores drift only for the externally managed `created_By` and `created_Date` tag entries on resources using `local.common_tags`. Every declared project tag remains Terraform-owned and must still be reviewed when a plan reports drift.
 
 ## Local tooling prerequisites
 
@@ -52,17 +54,19 @@ Before any backend initialization, plan, or apply, an authorized operator must v
 4. Naming inputs produce unused globally scoped names for Storage, ACR, Key Vault, App Service, PostgreSQL, and Front Door.
 5. The subscription has the required resource providers registered:
    - `Microsoft.Authorization`
+   - `Microsoft.App`
    - `Microsoft.Cdn`
    - `Microsoft.ContainerRegistry`
    - `Microsoft.DBforPostgreSQL`
    - `Microsoft.Insights`
    - `Microsoft.KeyVault`
+   - `Microsoft.ManagedIdentity`
    - `Microsoft.Network`
    - `Microsoft.OperationalInsights`
    - `Microsoft.Storage`
    - `Microsoft.Web`
 6. Sweden Central supports the selected P0v3 App Service plan with zone balancing, the selected General Purpose PostgreSQL SKU with zone-redundant HA, PostgreSQL 17, and the requested storage/backup configuration at deployment time.
-7. Subscription quotas can accommodate two initial App Service workers scaling to four, PostgreSQL compute/storage, public IP/service capacity where Azure allocates it internally, and monitoring ingestion.
+7. Subscription quotas can accommodate two initial App Service workers scaling to four, PostgreSQL compute/storage, the workload-profiles Container Apps environment/job, public IP/service capacity where Azure allocates it internally, and monitoring ingestion.
 8. The proposed VNet and subnet CIDRs do not overlap with existing, peered, on-premises, or planned networks.
 
 Do not assume local Terraform validation proves any live subscription, regional capacity, quota, registration, or name-availability condition.
@@ -81,6 +85,9 @@ Use separate identities and narrower roles when duties are separated. Avoid subs
 | Frontend upload                    | Storage Blob Data Contributor for the `$web` container or the smallest supported equivalent. Shared-key access remains disabled.                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Entra configuration                | Authorized ownership/administration of the existing SPA/API registrations and External ID configuration. This is separate from Azure resource RBAC.                                                                                                                                                                                                                                                                                                                                                                                    |
 | Production migration               | Private network/DNS reachability to PostgreSQL and database credentials delivered through an approved secret channel. The runner identity needs no broader Azure rights than its design requires.                                                                                                                                                                                                                                                                                                                                      |
+| GitHub production CD               | Federated user-assigned identity restricted to the repository's `production` Environment, with resource-scoped ACR, App Service, `$web`, Front Door endpoint, and migration-job roles only. It receives no direct Key Vault or Terraform-state access.                                                                                                                                                                                                                                                                                 |
+
+The approved trust model accepts that `Container Apps Jobs Contributor` on the migration job gives the GitHub deployment identity effective use of the job's database secret and attached identity through update/start operations. This is not equivalent to direct Key Vault read access, but it is a secret-use capability. Control of the backend image also makes the identity a trusted production release principal for code running with App Service runtime configuration. Azure RBAC cannot restrict job writes to the image field or disable execution overrides, so protected-environment approval and a narrowly reviewed future workflow are mandatory compensating controls.
 
 Every temporary elevated assignment must have an owner, justification, expiry/removal step, and evidence of removal after deployment.
 
@@ -228,8 +235,8 @@ Only after ACR, Key Vault, and Storage exist:
 
 ### Phase 7 - Exactly-once production migration
 
-1. Use the separately reviewed one-shot runner with private VNet routing and PostgreSQL private DNS resolution.
-2. Bind the runner to the same immutable backend release and deliver database credentials through the approved secret channel.
+1. Update the manual Container Apps migration job to the same reviewed immutable backend release.
+2. Confirm its dedicated identity still has only `AcrPull` and `Key Vault Secrets User`, and that its versionless password reference resolves without displaying the value.
 3. Confirm no App Service instance runs migrations at startup.
 4. Execute pending TypeORM migrations exactly once and retain sanitized status/evidence.
 5. Independently verify migration status/schema compatibility without printing credentials or sensitive application data.
@@ -237,7 +244,7 @@ Only after ACR, Key Vault, and Storage exist:
 **Go:** the migration completes once, the expected migration list/schema is present, and the recovery owner accepts the result.  
 **Stop:** runner/network/DNS/credential uncertainty, concurrent runner possibility, migration error, unexpected schema, or missing recovery decision. Do not send traffic to the new backend.
 
-A persistent runner does not exist. The initial deployment used a reviewed temporary one-shot runner that was removed afterward; future migrations require the same controlled temporary approach until a persistent runner is designed and approved.
+The persistent job is represented in Terraform but does not exist in Azure until a separately reviewed plan is applied. Continue using the approved manual process until live job networking, identity, secret resolution, and execution behavior have been validated.
 
 ### Phase 8 - Backend activation and health
 
@@ -340,17 +347,14 @@ Unexpected spend requires immediate notification to the budget owner and collect
 - [ ] Cost monitoring/alerts, operational ownership, incident contacts, backup retention, and recovery procedures are confirmed.
 - [ ] Final deployment evidence and approvals are stored in the approved system without state or secrets.
 
-## Deferred delivery automation work
+## Delivery automation status and first-run gate
 
-The validation-only GitHub Actions CI workflow does not deploy. CD is not implemented; a future delivery design must separately review:
+The validation CI remains deployment-free. `.github/workflows/cd.yml` now implements a manual production release without Terraform or client secrets: validate application, push a full-SHA backend tag, verify and deploy its digest, update/start/poll one migration execution, deploy and health-check App Service, build/upload the frontend with Entra authentication, purge Front Door, and run bounded public smoke checks.
 
-- workload-identity/OIDC authentication and environment protections;
-- remote-state access and plan/apply separation;
-- immutable image build, scanning, signing/provenance, and ACR push;
-- frontend build provenance and `$web` deployment;
-- secret-seeding ownership without exposing values;
-- a private-network, exactly-once migration job with concurrency controls and recovery gates;
-- saved-plan approval, deployment locks, artifact promotion, post-deployment tests, evidence retention, and temporary-role cleanup;
-- rollback/cost-containment workflows that never default to destroy.
+The workflow is manual-only, rejects refs other than `refs/heads/main`, and requires both the original `github.actor` and the current `github.triggering_actor` to equal `NivBar2000`, including on re-runs. It declares the `production` Environment, grants only `contents: read` and `id-token: write` to deployment, and serializes production runs without cancelling an active deployment. Required Environment reviewers are unavailable for this private repository under the current GitHub plan, so those controls plus the exact Environment-scoped federated subject and digest-qualified images are the accepted compensating boundary.
 
-Until those controls exist, every future deployment phase remains a separately approved manual operation. A persistent migration runner is likewise deferred; the temporary runner used for the initial migration was removed after successful execution.
+Before the first run, a human must review/apply and live-validate the Terraform OIDC/RBAC/migration-job foundation, verify all required public repository variables, confirm the selected `main` commit, and observe the run. Live OIDC, role propagation, ACR digest lookup, migration status polling, endpoint-scoped Front Door purge authorization, App Service image rollback, MIME handling, and end-to-end smoke behavior can only be proven in GitHub/Azure.
+
+Failure is intentionally forward-only at the database boundary. Migration failure stops before backend/frontend deployment. Backend restart or health failure triggers a best-effort previous-image restore, but it does not reverse a completed migration. Frontend upload is non-atomic, and failures during upload, purge, or final smoke checks do not restore prior static files. Retain a known-good frontend build and independently confirm schema compatibility before any application rollback.
+
+Still deferred: remote-state plan/apply automation, artifact promotion/signing/SBOM policy, automatic frontend rollback, database rollback orchestration, alert destinations, broader evidence retention, and cost-containment workflows. Terraform infrastructure changes remain separately planned and approved; CD never receives Terraform-state access or runs Terraform.

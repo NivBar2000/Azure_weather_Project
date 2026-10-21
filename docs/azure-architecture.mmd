@@ -40,31 +40,47 @@ flowchart LR
                 Primary -->|Synchronous replication| Standby
             end
 
+            subgraph MigrationSubnet[Container Apps Subnet · 10.40.3.0/24]
+                MigrationJob[azure-weather-prod-mig-d2cc26<br/>Manual one-shot TypeORM migration]
+            end
+
             KeyVault[Azure Key Vault<br/>Managed Identity]
             PrivateDNS[Private DNS Zones]
 
             App -->|Private connection| PostgreSQL
             App -->|Read secrets| KeyVault
+            MigrationJob -->|Private connection| PostgreSQL
+            MigrationJob -->|Versionless DB secret| KeyVault
             PrivateDNS -. Private resolution .-> PostgreSQL
         end
 
         Weather[OpenWeather API]
+        ACR[(Azure Container Registry<br/>Immutable backend images)]
         Monitor[Azure Monitor<br/>Application Insights]
 
         App -->|Outbound HTTPS| Weather
         App -->|Telemetry| Monitor
+        ACR -->|Digest pull| App
+        ACR -->|Digest pull| MigrationJob
     end
 
     FrontDoor -->|/api/* · Restricted origin| App
     Entra -. JWT validation .-> App
     FrontDoor -. Access logs .-> Monitor
+    GitHub[GitHub production Environment<br/>OIDC deployment identity]
+    GitHub -. 1 · Push SHA tag + resolve digest .-> ACR
+    GitHub -. 2 · Update image + explicit start .-> MigrationJob
+    GitHub -. 3 · Deploy digest after migration .-> App
+    GitHub -. 4 · Upload static build .-> Storage
+    GitHub -. 5 · Purge + smoke checks .-> FrontDoor
+    MigrationJob -->|Execution logs| Monitor
 
     classDef azure fill:#e8f3fc,stroke:#0078d4,color:#172b4d,stroke-width:2px;
     classDef secure fill:#f1ecf8,stroke:#8064a2,color:#33264a,stroke-width:2px;
     classDef external fill:#fff4ce,stroke:#d38b00,color:#5c3b00;
     classDef observe fill:#e6f4ea,stroke:#107c10,color:#173b17;
 
-    class FrontDoor,Entra,App,Instance1,Instance2,Scale azure;
+    class FrontDoor,Entra,App,Instance1,Instance2,Scale,MigrationJob,GitHub,ACR azure;
     class PostgreSQL,Primary,Standby,PrivateDNS secure;
     class Google,Microsoft,Premium,Weather,KeyVault external;
     class Storage,Monitor observe;
