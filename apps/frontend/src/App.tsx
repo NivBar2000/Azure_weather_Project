@@ -23,6 +23,7 @@ import {
 import { apiTokenRequest } from "./auth/authConfig";
 import { ForecastView } from "./components/ForecastView";
 import { LocationResults } from "./components/LocationResults";
+import { PopularCities } from "./components/PopularCities";
 import { SavedForecastHistory } from "./components/SavedForecastHistory";
 import { SearchForm } from "./components/SearchForm";
 
@@ -228,6 +229,7 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
   const [historyError, setHistoryError] = useState("");
   const [savedForecast, setSavedForecast] =
     useState<SavedForecastDetail | null>(null);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -248,6 +250,9 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
 
     setLoading("locations");
     setForecast(null);
+    setSelectedDayIndex(0);
+    setSaveMessage("");
+    setSaveError("");
     setView("search");
     setLocations([]);
     setHasSearched(true);
@@ -264,10 +269,17 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
     setError("");
     setMessage("");
     setLoading("forecast");
+    setForecast(null);
+    setSavedForecast(null);
+    setSelectedDayIndex(0);
+    setSaveMessage("");
+    setSaveError("");
     try {
-      setForecast(
-        await apiClient.fetchForecast(location.latitude, location.longitude),
+      const loadedForecast = await apiClient.fetchForecast(
+        location.latitude,
+        location.longitude,
       );
+      setForecast(loadedForecast);
       setView("live");
       setLocations([]);
     } catch {
@@ -282,6 +294,7 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
     setLocations([]);
     setForecast(null);
     setSavedForecast(null);
+    setSelectedDayIndex(0);
     setView("search");
     setMessage("");
     setError("");
@@ -291,7 +304,8 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
   }
 
   async function saveCurrentForecast(): Promise<void> {
-    if (!forecast) {
+    const selectedDay = forecast?.days[selectedDayIndex];
+    if (!forecast || !selectedDay || saving) {
       return;
     }
     setSaving(true);
@@ -301,8 +315,9 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
       await apiClient.saveForecast(
         forecast.location.latitude,
         forecast.location.longitude,
+        selectedDay.date,
       );
-      setSaveMessage("Saved as a new historical snapshot.");
+      setSaveMessage("This forecast day was saved as a new snapshot.");
       setHistoryItems([]);
       setNextCursor(null);
     } catch {
@@ -355,7 +370,9 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
     setHistoryLoading(true);
     setHistoryError("");
     try {
-      setSavedForecast(await apiClient.getSavedForecast(item.id));
+      const loadedForecast = await apiClient.getSavedForecast(item.id);
+      setSavedForecast(loadedForecast);
+      setSelectedDayIndex(0);
       setView("historical");
     } catch {
       setHistoryError(
@@ -368,6 +385,12 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
 
   const isLoading = loading !== "idle";
 
+  function selectForecastDay(index: number): void {
+    setSelectedDayIndex(index);
+    setSaveMessage("");
+    setSaveError("");
+  }
+
   return (
     <main className="page-shell">
       <header className="hero">
@@ -378,7 +401,7 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
           <p className="eyebrow">Weather, made clear</p>
           <h1>Azure Weather</h1>
           <p className="intro">
-            Search for a city and explore its five-day forecast in local time.
+            Search the world, then explore the outlook one clear day at a time.
           </p>
         </div>
       </header>
@@ -402,12 +425,18 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
 
       <section className="weather-panel" aria-label="Weather search">
         {view === "search" && !forecast && (
-          <SearchForm
-            query={query}
-            disabled={isLoading}
-            onQueryChange={setQuery}
-            onSubmit={handleSearch}
-          />
+          <div className="search-dashboard">
+            <SearchForm
+              query={query}
+              disabled={isLoading}
+              onQueryChange={setQuery}
+              onSubmit={handleSearch}
+            />
+            <PopularCities
+              disabled={isLoading}
+              onSelect={(city) => void handleLocationSelection(city)}
+            />
+          </div>
         )}
 
         {view === "search" && message && (
@@ -450,6 +479,8 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
         {view === "live" && forecast && (
           <ForecastView
             forecast={forecast}
+            selectedDayIndex={selectedDayIndex}
+            onSelectedDayChange={selectForecastDay}
             onAnotherSearch={startAnotherSearch}
             saving={saving}
             saveMessage={saveMessage}
@@ -474,6 +505,8 @@ function WeatherApplication({ apiClient }: { apiClient: WeatherApiClient }) {
         {view === "historical" && savedForecast && (
           <ForecastView
             forecast={savedForecast.forecast}
+            selectedDayIndex={selectedDayIndex}
+            onSelectedDayChange={selectForecastDay}
             mode="historical"
             savedAt={savedForecast.savedAt}
             onAnotherSearch={startAnotherSearch}

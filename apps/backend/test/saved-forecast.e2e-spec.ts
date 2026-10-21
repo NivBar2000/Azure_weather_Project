@@ -139,6 +139,7 @@ describe("saved forecast endpoints", () => {
     const response = await authorizedPost({
       latitude: 51.5072,
       longitude: -0.1276,
+      date: "2026-10-22",
     }).expect(201);
     const body = response.body as SavedForecastDetail;
 
@@ -147,22 +148,49 @@ describe("saved forecast endpoints", () => {
       "-0.1276",
     );
     expect(body.cityName).toBe("London");
-    expect(body.forecast).toEqual(createForecast());
-    expect(savedForecasts[0].forecastSnapshot).toEqual(createForecast());
+    expect(body.forecast.days).toEqual([createForecast().days[1]]);
+    expect(savedForecasts[0].forecastSnapshot.days).toEqual([
+      createForecast().days[1],
+    ]);
+    expect(body.forecast.location).toEqual(createForecast().location);
+    expect(body.forecast.timezoneOffsetSeconds).toBe(0);
+    expect(body.forecastStartDate).toBe("2026-10-22");
+    expect(body.forecastEndDate).toBe("2026-10-22");
     expect(JSON.stringify(body)).not.toMatch(
       /email|token|issuer|externalSubject|rawClaims/i,
     );
   });
 
   it.each([
-    [{ latitude: 91, longitude: 0 }],
-    [{ latitude: 0, longitude: -181 }],
-    [{ latitude: "51.5", longitude: 0 }],
-    [{ latitude: "NaN", longitude: 0 }],
-    [{ latitude: null, longitude: 0 }],
+    [{ latitude: 91, longitude: 0, date: "2026-10-21" }],
+    [{ latitude: 0, longitude: -181, date: "2026-10-21" }],
+    [{ latitude: "51.5", longitude: 0, date: "2026-10-21" }],
+    [{ latitude: "NaN", longitude: 0, date: "2026-10-21" }],
+    [{ latitude: null, longitude: 0, date: "2026-10-21" }],
     [{ longitude: 0 }],
     [{ latitude: 0 }],
-    [{ latitude: 0, longitude: 0, cityName: "Client supplied" }],
+    [
+      {
+        latitude: 0,
+        longitude: 0,
+        date: "2026-10-21",
+        cityName: "Client supplied",
+      },
+    ],
+    [
+      {
+        latitude: 0,
+        longitude: 0,
+        date: "2026-10-21",
+        forecast: createForecast(),
+      },
+    ],
+    [{ latitude: 0, longitude: 0 }],
+    [{ latitude: 0, longitude: 0, date: null }],
+    [{ latitude: 0, longitude: 0, date: 20261021 }],
+    [{ latitude: 0, longitude: 0, date: "2026-1-01" }],
+    [{ latitude: 0, longitude: 0, date: "2026-02-30" }],
+    [{ latitude: 0, longitude: 0, date: "not-a-date" }],
   ])("rejects an invalid save body", async (body) => {
     await authorizedPost(body).expect(400);
     expect(weatherService.getForecast).not.toHaveBeenCalled();
@@ -172,16 +200,30 @@ describe("saved forecast endpoints", () => {
     const first = await authorizedPost({
       latitude: 51.5,
       longitude: -0.1,
+      date: "2026-10-21",
     }).expect(201);
     const second = await authorizedPost({
       latitude: 51.5,
       longitude: -0.1,
+      date: "2026-10-21",
     }).expect(201);
 
     expect((first.body as SavedForecastDetail).id).not.toBe(
       (second.body as SavedForecastDetail).id,
     );
     expect(savedForecasts).toHaveLength(2);
+  });
+
+  it("rejects a valid date that is absent from the fetched forecast", async () => {
+    const response = await authorizedPost({
+      latitude: 51.5,
+      longitude: -0.1,
+      date: "2026-10-30",
+    }).expect(400);
+
+    expect(weatherService.getForecast).toHaveBeenCalledTimes(1);
+    expect(response.text).not.toContain("forecastSnapshot");
+    expect(savedForecasts).toHaveLength(0);
   });
 
   it("lists newest first and applies default and maximum limits", async () => {
@@ -200,6 +242,8 @@ describe("saved forecast endpoints", () => {
     expect(defaultBody.items[0].savedAt > defaultBody.items[1].savedAt).toBe(
       true,
     );
+    expect(defaultBody.items[0].forecastStartDate).toBe("2026-10-21");
+    expect(defaultBody.items[0].forecastEndDate).toBe("2026-10-22");
     expect(defaultBody.nextCursor).not.toBeNull();
     expect(maximumBody.nextCursor).not.toBeNull();
   });
@@ -240,7 +284,11 @@ describe("saved forecast endpoints", () => {
   );
 
   it("returns the exact stored snapshot without calling weather", async () => {
-    await authorizedPost({ latitude: 51.5, longitude: -0.1 }).expect(201);
+    await authorizedPost({
+      latitude: 51.5,
+      longitude: -0.1,
+      date: "2026-10-21",
+    }).expect(201);
     const id = savedForecasts[0].id;
     weatherService.getForecast.mockClear();
 
@@ -248,14 +296,19 @@ describe("saved forecast endpoints", () => {
       200,
     );
 
-    expect((response.body as SavedForecastDetail).forecast).toEqual(
-      createForecast(),
-    );
+    expect((response.body as SavedForecastDetail).forecast).toEqual({
+      ...createForecast(),
+      days: [createForecast().days[0]],
+    });
     expect(weatherService.getForecast).not.toHaveBeenCalled();
   });
 
   it("returns 404 for unknown and cross-user detail lookups", async () => {
-    await authorizedPost({ latitude: 51.5, longitude: -0.1 }).expect(201);
+    await authorizedPost({
+      latitude: 51.5,
+      longitude: -0.1,
+      date: "2026-10-21",
+    }).expect(201);
     const id = savedForecasts[0].id;
 
     await authorizedGet(
@@ -271,7 +324,11 @@ describe("saved forecast endpoints", () => {
   });
 
   it("isolates list results by authenticated user", async () => {
-    await authorizedPost({ latitude: 51.5, longitude: -0.1 }).expect(201);
+    await authorizedPost({
+      latitude: 51.5,
+      longitude: -0.1,
+      date: "2026-10-21",
+    }).expect(201);
 
     const otherResponse = await authorizedGet(
       "/api/saved-forecasts",
@@ -409,6 +466,27 @@ function createForecast(): ForecastResponse {
             windSpeed: 3,
             description: "clear sky",
             weatherCode: 800,
+          },
+        ],
+      },
+      {
+        date: "2026-10-22",
+        summary: "light rain",
+        weatherCode: 500,
+        minimumTemperature: 9,
+        maximumTemperature: 13,
+        averageHumidity: 72,
+        maximumWindSpeed: 5,
+        slots: [
+          {
+            timestamp: "2026-10-22T12:00:00.000Z",
+            localTime: "2026-10-22T12:00:00",
+            temperature: 12,
+            feelsLike: 11,
+            humidity: 72,
+            windSpeed: 4,
+            description: "light rain",
+            weatherCode: 500,
           },
         ],
       },

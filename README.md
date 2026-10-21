@@ -180,7 +180,9 @@ For login problems, verify the SPA redirect URI exactly matches `http://localhos
 
 ## Weather forecast flow
 
-The browser searches and loads forecasts only through the backend endpoints under `/api/weather`. The backend uses fixed OpenWeather geocoding and five-day forecast paths, keeps the API key server-side, validates user input, and returns an application-owned response rather than the upstream payload.
+The browser searches and loads forecasts only through the backend endpoints under `/api/weather`. The backend uses fixed OpenWeather geocoding and five-day forecast paths, keeps the API key server-side, validates user input, and returns an application-owned response rather than the upstream payload. The responsive dashboard displays one day at a time with Previous and Next controls while retaining the selected day's summary, metrics, weather symbol, and three-hour slots.
+
+The **Popular cities** shortcuts provide a curated set of eight preset locations and call the forecast endpoint directly with their known coordinates; they do not perform geocoding and are not personalized or persisted favorites.
 
 Successful location searches are cached for 60 minutes, and successful forecasts are cached for 10 minutes. This small cache is held in memory, is local to each backend instance, and is not shared across replicas. It should be replaced or reconsidered if globally shared caching becomes necessary.
 
@@ -188,18 +190,18 @@ Successful location searches are cached for 60 minutes, and successful forecasts
 
 Authenticated users can create immutable historical snapshots and browse only their own history through these protected endpoints:
 
-- `POST /api/saved-forecasts` accepts only numeric `latitude` and `longitude`, obtains the normalized forecast through the backend weather service, and creates a new snapshot with HTTP 201.
+- `POST /api/saved-forecasts` accepts only numeric `latitude` and `longitude` plus a strict `YYYY-MM-DD` `date`, obtains the normalized forecast through the backend weather service, and creates a one-day snapshot with HTTP 201.
 - `GET /api/saved-forecasts` returns newest-first summaries with an opaque cursor, a default limit of 20, and a maximum limit of 50.
 - `GET /api/saved-forecasts/:id` returns one stored snapshot without calling OpenWeather.
 
-Saving is server-authoritative: the browser cannot submit a user ID, owner, city name, identity field, or forecast payload. Every save creates a new row rather than replacing an earlier snapshot. The backend derives ownership from the validated Entra principal, synchronizes the local user when needed, and scopes list/detail queries by that user. A missing record and a record owned by someone else both return HTTP 404 to prevent ownership disclosure.
+Saving is server-authoritative: the browser cannot submit a user ID, owner, city name, identity field, or forecast payload. The backend re-fetches the trusted forecast, matches the requested date exactly, and stores only that day with the trusted location and timezone. Every save creates a new row rather than replacing an earlier snapshot. The backend derives ownership from the validated Entra principal, synchronizes the local user when needed, and scopes list/detail queries by that user. A missing record and a record owned by someone else both return HTTP 404 to prevent ownership disclosure. Existing multi-day snapshots remain readable and use the same day navigation, while new history entries show a single date cleanly.
 
 Manual saved-history verification:
 
 1. Sign in at `http://localhost:8080/`, search for a city, and open its live forecast.
-2. Select **Save forecast** twice and confirm each action reports a newly created historical snapshot.
+2. Navigate to the second day, select **Save this day** twice, and confirm each action reports a newly created one-day historical snapshot.
 3. Open **Saved forecasts** and confirm both newest-first entries appear with their saved times.
-4. Select an entry and confirm it is labeled **Historical saved snapshot**. In browser developer tools, confirm opening it calls `/api/saved-forecasts/:id` and does not call `/api/weather/forecast`.
+4. Select an entry and confirm it is labeled **Historical saved snapshot**, shows `Day 1 of 1`, and disables both day-navigation boundary controls. In browser developer tools, confirm opening it calls `/api/saved-forecasts/:id` and does not call `/api/weather/forecast`.
 5. Return to search, then use **Load more** when more than one page is available.
 6. Sign in as a different test user and confirm the first user's history is not visible. Do not copy tokens or authorization headers into diagnostics.
 
@@ -233,13 +235,14 @@ To start a deployment, open **Actions**, select **Production CD**, choose **Run 
 ### Implemented
 
 - City search and location selection
-- Five-day forecasts with expandable three-hour details
+- Single-day browsing across five-day forecasts with expandable three-hour details
+- Curated popular-city coordinate shortcuts
 - Backend-only OpenWeather access with normalized responses
 - Local, per-instance in-memory caching
 - PostgreSQL entities, configuration, and migration foundation
 - Complete local frontend, backend, and PostgreSQL container stack
 - Microsoft Entra External ID authentication and privacy-safe user synchronization
-- Authenticated immutable saved forecasts and personal cursor-paginated history
+- Authenticated immutable selected-day snapshots and personal cursor-paginated history, with legacy multi-day compatibility
 - Production Azure Terraform configuration and operating documentation
 - Operational Azure production infrastructure, frontend, private database, backend, authentication, and OpenWeather flow
 - GitHub Actions CI for application, backend-container, dependency-audit, and Terraform validation

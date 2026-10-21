@@ -76,6 +76,7 @@ export interface WeatherApiClient {
   saveForecast(
     latitude: number,
     longitude: number,
+    date: string,
   ): Promise<SavedForecastDetail>;
   listSavedForecasts(cursor?: string): Promise<SavedForecastPage>;
   getSavedForecast(id: string): Promise<SavedForecastDetail>;
@@ -103,13 +104,13 @@ export function createWeatherApiClient(
       url.searchParams.set("lon", String(longitude));
       return requestJson<ForecastResponse>(url, getAccessToken);
     },
-    saveForecast: (latitude, longitude) =>
+    saveForecast: (latitude, longitude, date) =>
       requestJson<SavedForecastDetail>(
         createApiUrl("/saved-forecasts"),
         getAccessToken,
         {
           method: "POST",
-          body: JSON.stringify({ latitude, longitude }),
+          body: JSON.stringify({ latitude, longitude, date }),
         },
       ),
     listSavedForecasts: (cursor) => {

@@ -106,6 +106,18 @@ const savedDetail = {
   forecast: forecastResult,
 };
 
+const singleDaySavedSummary = {
+  ...savedSummary,
+  id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  forecastStartDate: "2026-01-02",
+  forecastEndDate: "2026-01-02",
+};
+
+const singleDaySavedDetail = {
+  ...singleDaySavedSummary,
+  forecast: { ...forecastResult, days: [forecastResult.days[1]] },
+};
+
 describe("App", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -232,14 +244,24 @@ describe("App", () => {
     );
   });
 
-  it("selects a location and renders five forecast cards", async () => {
+  it("selects a location and initially renders only its first forecast day", async () => {
     await renderForecast();
 
     expect(
       await screen.findByRole("heading", { name: "Forecast for London, GB" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("3-hour details")).toHaveLength(5);
-    expect(screen.getAllByText("12°C").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("3-hour forecast details")).toHaveLength(1);
+    expect(screen.getByText("Day 1 of 5")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/(?:January 1, 2026|1 January 2026)/),
+    ).toHaveLength(2);
+    expect(screen.queryByText(/(?:January 2, 2026|2 January 2026)/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Previous forecast day" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Next forecast day" }),
+    ).not.toBeDisabled();
     expect(String(fetchMock.mock.calls[2][0])).toContain(
       "/api/weather/forecast?lat=51.5072&lon=-0.1276",
     );
@@ -247,14 +269,79 @@ describe("App", () => {
 
   it("expands three-hour forecast details", async () => {
     await renderForecast();
-    const summary = (await screen.findAllByText("3-hour details"))[0];
+    const summary = screen.getByText("3-hour forecast details");
     const details = summary.closest("details");
 
     fireEvent.click(summary);
 
     expect(details).toHaveAttribute("open");
-    expect(screen.getAllByText("12:00")).toHaveLength(5);
-    expect(screen.getAllByText("3.2 m/s")).toHaveLength(5);
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.getByText("3.2 m/s")).toBeInTheDocument();
+  });
+
+  it("navigates forecast days and disables controls at each boundary", async () => {
+    await renderForecast();
+    const previous = screen.getByRole("button", {
+      name: "Previous forecast day",
+    });
+    const next = screen.getByRole("button", { name: "Next forecast day" });
+
+    fireEvent.click(next);
+    expect(screen.getByText("Day 2 of 5")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/(?:January 2, 2026|2 January 2026)/),
+    ).toHaveLength(2);
+    expect(previous).not.toBeDisabled();
+    fireEvent.click(previous);
+    expect(screen.getByText("Day 1 of 5")).toBeInTheDocument();
+
+    for (let day = 1; day < 5; day += 1) fireEvent.click(next);
+    expect(screen.getByText("Day 5 of 5")).toBeInTheDocument();
+    expect(next).toBeDisabled();
+  });
+
+  it("loads a popular city directly by coordinates and resets the selected day", async () => {
+    await renderForecast();
+    fireEvent.click(screen.getByRole("button", { name: "Next forecast day" }));
+    expect(screen.getByText("Day 2 of 5")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Search another city" }),
+    );
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(forecastResult));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "View forecast for Tel Aviv, Israel",
+      }),
+    );
+
+    expect(await screen.findByText("Day 1 of 5")).toBeInTheDocument();
+    expect(String(fetchMock.mock.calls[3][0])).toContain(
+      "/api/weather/forecast?lat=32.0853&lon=34.7818",
+    );
+    expect(
+      fetchMock.mock.calls
+        .slice(3)
+        .some(([url]) => String(url).includes("/weather/locations")),
+    ).toBe(false);
+  });
+
+  it("shows safe loading and failure states for a popular city", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(currentUser))
+      .mockResolvedValueOnce(new Response("provider details", { status: 503 }));
+    render(<App />);
+    await screen.findByText("Signed in as Authenticated User");
+    fireEvent.click(
+      screen.getByRole("button", { name: "View forecast for Paris, France" }),
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading the forecast",
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We could not load that forecast");
+    expect(alert).not.toHaveTextContent("provider details");
   });
 
   it("announces a weather loading state", async () => {
@@ -321,17 +408,18 @@ describe("App", () => {
     expect(alert).not.toHaveTextContent("internal response body");
   });
 
-  it("shows save only for a live forecast and sends only coordinates", async () => {
+  it("saves only the selected forecast date with its coordinates", async () => {
     await renderForecast();
     expect(
-      screen.getByRole("button", { name: "Save forecast" }),
+      screen.getByRole("button", { name: "Save this day" }),
     ).toBeInTheDocument();
     fetchMock.mockResolvedValueOnce(jsonResponse(savedDetail));
 
-    fireEvent.click(screen.getByRole("button", { name: "Save forecast" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next forecast day" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save this day" }));
 
     expect(
-      await screen.findByText("Saved as a new historical snapshot."),
+      await screen.findByText("This forecast day was saved as a new snapshot."),
     ).toBeInTheDocument();
     const saveCall = fetchMock.mock.calls[3];
     expect(String(saveCall[0])).toContain("/api/saved-forecasts");
@@ -340,6 +428,7 @@ describe("App", () => {
     expect(JSON.parse(String(options.body))).toEqual({
       latitude: 51.5072,
       longitude: -0.1276,
+      date: "2026-01-02",
     });
     expect(options.headers).toMatchObject({
       Authorization: "Bearer test-access-token",
@@ -349,7 +438,7 @@ describe("App", () => {
   it("disables save while pending", async () => {
     await renderForecast();
     fetchMock.mockReturnValueOnce(new Promise(() => undefined));
-    fireEvent.click(screen.getByRole("button", { name: "Save forecast" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save this day" }));
     expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
   });
 
@@ -358,11 +447,25 @@ describe("App", () => {
     fetchMock.mockResolvedValueOnce(
       new Response("database details", { status: 500 }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Save forecast" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save this day" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("We could not save this forecast");
     expect(alert).not.toHaveTextContent("database details");
+  });
+
+  it("clears save feedback when the selected day changes", async () => {
+    await renderForecast();
+    fetchMock.mockResolvedValueOnce(jsonResponse(singleDaySavedDetail));
+    fireEvent.click(screen.getByRole("button", { name: "Save this day" }));
+    expect(
+      await screen.findByText("This forecast day was saved as a new snapshot."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next forecast day" }));
+    expect(
+      screen.queryByText("This forecast day was saved as a new snapshot."),
+    ).toBeNull();
   });
 
   it("shows a loading saved-forecast state", async () => {
@@ -454,7 +557,10 @@ describe("App", () => {
     expect(
       await screen.findByText("Historical saved snapshot"),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save forecast" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save this day" })).toBeNull();
+    expect(screen.getByText("Day 1 of 5")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next forecast day" }));
+    expect(screen.getByText("Day 2 of 5")).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).includes("/weather/")),
     ).toBe(false);
@@ -470,6 +576,33 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Return to search" }));
     expect(screen.getByLabelText("City name")).toBeInTheDocument();
+  });
+
+  it("formats and opens a newly saved single-day snapshot", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(currentUser))
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [singleDaySavedSummary], nextCursor: null }),
+      )
+      .mockResolvedValueOnce(jsonResponse(singleDaySavedDetail));
+    render(<App />);
+    await screen.findByText("Signed in as Authenticated User");
+    fireEvent.click(screen.getByRole("button", { name: "Saved forecasts" }));
+
+    const historyItem = await screen.findByRole("button", {
+      name: /London, GB/,
+    });
+    expect(historyItem).toHaveTextContent(/(?:January 2, 2026|2 January 2026)/);
+    expect(historyItem).not.toHaveTextContent(" to ");
+    fireEvent.click(historyItem);
+
+    expect(await screen.findByText("Day 1 of 1")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Previous forecast day" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Next forecast day" }),
+    ).toBeDisabled();
   });
 
   async function renderForecast() {

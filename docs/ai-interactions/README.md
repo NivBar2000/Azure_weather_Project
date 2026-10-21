@@ -33,3 +33,4 @@ Implementation results are reviewed by a human before approval. Follow-up correc
 - [025 - Production GitHub Actions CD](./025-production-github-actions-cd.md)
 - [026 - Production CD Re-run Authorization](./026-production-cd-rerun-authorization.md)
 - [027 - GitHub OIDC Immutable Subject Correction](./027-github-oidc-immutable-subject.md)
+- [028 - Single-Day Forecast Experience](./028-single-day-forecast-experience.md)

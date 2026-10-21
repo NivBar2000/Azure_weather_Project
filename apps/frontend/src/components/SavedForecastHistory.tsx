@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { SavedForecastSummary } from "../api/weatherApi";
-import { formatSavedTime } from "./dateFormat";
+import { formatForecastDate, formatSavedTime } from "./dateFormat";
 
 interface SavedForecastHistoryProps {
   items: SavedForecastSummary[];
@@ -96,6 +96,9 @@ export function SavedForecastHistory({
 function formatDateRange(item: SavedForecastSummary): string {
   if (!item.forecastStartDate || !item.forecastEndDate) {
     return "Forecast dates unavailable";
+  }
+  if (item.forecastStartDate === item.forecastEndDate) {
+    return formatForecastDate(item.forecastStartDate);
   }
   return `${item.forecastStartDate} to ${item.forecastEndDate}`;
 }

@@ -3,6 +3,7 @@ import { ForecastResponse } from "../weather/weather.types";
 export interface SaveForecastRequest {
   latitude: number;
   longitude: number;
+  date: string;
 }
 
 export interface SavedForecastSummary {

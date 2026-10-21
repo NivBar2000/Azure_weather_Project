@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
 import { DailyForecast, ForecastResponse } from "../api/weatherApi";
-import { formatSavedTime } from "./dateFormat";
+import { formatForecastDate, formatSavedTime } from "./dateFormat";
 import { WeatherSymbol } from "./WeatherSymbol";
 
 interface ForecastViewProps {
   forecast: ForecastResponse;
+  selectedDayIndex: number;
+  onSelectedDayChange: (index: number) => void;
   onAnotherSearch: () => void;
   mode?: "live" | "historical";
   savedAt?: string;
@@ -16,6 +18,8 @@ interface ForecastViewProps {
 
 export function ForecastView({
   forecast,
+  selectedDayIndex,
+  onSelectedDayChange,
   onAnotherSearch,
   mode = "live",
   savedAt,
@@ -25,12 +29,24 @@ export function ForecastView({
   onSave,
 }: ForecastViewProps) {
   const heading = useRef<HTMLHeadingElement>(null);
+  const selectedDay = forecast.days[selectedDayIndex];
 
   useEffect(() => {
     if (mode === "historical") {
       heading.current?.focus();
     }
   }, [mode, savedAt]);
+
+  if (!selectedDay) {
+    return (
+      <p className="notice empty-message" role="status">
+        No forecast days are available for this location.
+      </p>
+    );
+  }
+
+  const isFirstDay = selectedDayIndex === 0;
+  const isLastDay = selectedDayIndex === forecast.days.length - 1;
 
   return (
     <section className="forecast" aria-labelledby="forecast-heading">
@@ -39,7 +55,7 @@ export function ForecastView({
           <p className="eyebrow">
             {mode === "historical"
               ? "Historical saved snapshot"
-              : "Live five-day outlook"}
+              : "Live weather outlook"}
           </p>
           <h2 id="forecast-heading" ref={heading} tabIndex={-1}>
             Forecast for {forecast.location.name}, {forecast.location.country}
@@ -58,7 +74,7 @@ export function ForecastView({
               disabled={saving}
               onClick={onSave}
             >
-              {saving ? "Saving…" : "Save forecast"}
+              {saving ? "Saving…" : "Save this day"}
             </button>
           )}
           <button
@@ -82,21 +98,44 @@ export function ForecastView({
         </p>
       )}
 
-      <div className="forecast-grid">
-        {forecast.days.map((day) => (
-          <DayForecastCard key={day.date} day={day} />
-        ))}
+      <div className="day-navigation" aria-label="Forecast day navigation">
+        <button
+          className="secondary-button"
+          type="button"
+          aria-label="Previous forecast day"
+          disabled={isFirstDay}
+          onClick={() => onSelectedDayChange(selectedDayIndex - 1)}
+        >
+          <span aria-hidden="true">←</span> Previous
+        </button>
+        <div className="day-position" aria-live="polite">
+          <strong>{formatForecastDate(selectedDay.date)}</strong>
+          <span>
+            Day {selectedDayIndex + 1} of {forecast.days.length}
+          </span>
+        </div>
+        <button
+          className="secondary-button"
+          type="button"
+          aria-label="Next forecast day"
+          disabled={isLastDay}
+          onClick={() => onSelectedDayChange(selectedDayIndex + 1)}
+        >
+          Next <span aria-hidden="true">→</span>
+        </button>
       </div>
+
+      <DayForecastCard day={selectedDay} />
     </section>
   );
 }
 
 function DayForecastCard({ day }: { day: DailyForecast }) {
   return (
-    <article className="forecast-card">
+    <article className="forecast-card primary-forecast-card">
       <div className="day-summary">
         <div>
-          <p className="day-name">{formatDate(day.date)}</p>
+          <p className="day-name">{formatForecastDate(day.date)}</p>
           <p className="summary-text">{day.summary}</p>
         </div>
         <WeatherSymbol
@@ -104,22 +143,24 @@ function DayForecastCard({ day }: { day: DailyForecast }) {
           description={day.summary}
         />
       </div>
-      <p className="temperature-range">
+      <p className="temperature-range" aria-label="Temperature range">
         <strong>{formatNumber(day.maximumTemperature)}°C</strong>
-        <span>{formatNumber(day.minimumTemperature)}°C</span>
+        <span>High</span>
+        <strong>{formatNumber(day.minimumTemperature)}°C</strong>
+        <span>Low</span>
       </p>
       <dl className="daily-metrics">
         <div>
-          <dt>Humidity</dt>
+          <dt>Average humidity</dt>
           <dd>{formatNumber(day.averageHumidity)}%</dd>
         </div>
         <div>
-          <dt>Wind</dt>
+          <dt>Maximum wind</dt>
           <dd>{formatNumber(day.maximumWindSpeed)} m/s</dd>
         </div>
       </dl>
       <details>
-        <summary>3-hour details</summary>
+        <summary>3-hour forecast details</summary>
         <div className="slot-list">
           {day.slots.map((slot) => (
             <div className="forecast-slot" key={slot.timestamp}>
@@ -139,15 +180,6 @@ function DayForecastCard({ day }: { day: DailyForecast }) {
       </details>
     </article>
   );
-}
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
 }
 
 function formatNumber(value: number): string {

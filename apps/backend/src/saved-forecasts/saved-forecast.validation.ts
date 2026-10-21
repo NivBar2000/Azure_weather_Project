@@ -6,6 +6,7 @@ const MAXIMUM_PAGE_LIMIT = 50;
 const MAXIMUM_CURSOR_LENGTH = 512;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const FORECAST_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export interface SavedForecastCursor {
   savedAt: Date;
@@ -18,17 +19,19 @@ export function parseSaveForecastRequest(body: unknown): SaveForecastRequest {
   }
   const keys = Object.keys(body);
   if (
-    keys.length !== 2 ||
+    keys.length !== 3 ||
     !keys.includes("latitude") ||
-    !keys.includes("longitude")
+    !keys.includes("longitude") ||
+    !keys.includes("date")
   ) {
     throw new BadRequestException(
-      "Request body must contain only latitude and longitude.",
+      "Request body must contain only latitude, longitude, and date.",
     );
   }
   return {
     latitude: parseCoordinate(body.latitude, "latitude", -90, 90),
     longitude: parseCoordinate(body.longitude, "longitude", -180, 180),
+    date: parseForecastDate(body.date),
   };
 }
 
@@ -110,6 +113,24 @@ function parseCoordinate(
     throw new BadRequestException(
       `${name} must be a number between ${minimum} and ${maximum}.`,
     );
+  }
+  return value;
+}
+
+function parseForecastDate(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new BadRequestException("date must use the YYYY-MM-DD format.");
+  }
+  const match = FORECAST_DATE_PATTERN.exec(value);
+  if (!match) {
+    throw new BadRequestException("date must use the YYYY-MM-DD format.");
+  }
+  const [, year, month, day] = match;
+  const parsed = new Date(
+    Date.UTC(Number(year), Number(month) - 1, Number(day)),
+  );
+  if (parsed.toISOString().slice(0, 10) !== value) {
+    throw new BadRequestException("date must be a valid calendar date.");
   }
   return value;
 }

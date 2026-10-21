@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AuthenticatedPrincipal } from "../auth/auth.types";
@@ -32,7 +36,13 @@ export class SavedForecastService {
       String(request.latitude),
       String(request.longitude),
     );
-    const snapshot = cloneForecastSnapshot(forecast);
+    const selectedDay = forecast.days.find((day) => day.date === request.date);
+    if (!selectedDay) {
+      throw new BadRequestException(
+        "Requested date is not available in the current forecast.",
+      );
+    }
+    const snapshot = cloneSelectedDaySnapshot(forecast, selectedDay);
     const entity = this.forecasts.create({
       userId: user.id,
       cityName: snapshot.location.name,
@@ -90,8 +100,15 @@ export class SavedForecastService {
   }
 }
 
-function cloneForecastSnapshot(forecast: ForecastResponse): ForecastResponse {
-  return structuredClone(forecast);
+function cloneSelectedDaySnapshot(
+  forecast: ForecastResponse,
+  selectedDay: ForecastResponse["days"][number],
+): ForecastResponse {
+  return structuredClone({
+    location: forecast.location,
+    timezoneOffsetSeconds: forecast.timezoneOffsetSeconds,
+    days: [selectedDay],
+  });
 }
 
 function toSummary(entity: SavedForecastEntity): SavedForecastSummary {
