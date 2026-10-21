@@ -6,7 +6,7 @@ This document records the initial production deployment outcome and retains the 
 
 > **Historical context:** Interaction 013 performed no Azure deployment. Later reviewed interactions provisioned the infrastructure, deployed the artifacts, seeded secrets, configured Entra, and ran the initial production migrations.
 
-The Sweden Central infrastructure, frontend, database migrations, backend, Microsoft Entra External ID authentication, and backend-only OpenWeather integration are operational. Human browser validation on 2026-10-21 succeeded for Google and Microsoft Account sign-in, city search and live forecasts, saved-forecast create/list/detail behavior, isolation between two identities, and sign-out. CI/CD and a persistent production migration runner remain deferred; future changes must continue to use the stop/go gates below and retain human approval evidence.
+The Sweden Central infrastructure, frontend, database migrations, backend, Microsoft Entra External ID authentication, and backend-only OpenWeather integration are operational. Human browser validation on 2026-10-21 succeeded for Google and Microsoft Account sign-in, city search and live forecasts, saved-forecast create/list/detail behavior, isolation between two identities, and sign-out. Repository validation CI is implemented; CD and a persistent production migration runner remain deferred. Future changes must continue to use the stop/go gates below and retain human approval evidence.
 
 ## Readiness findings and blockers
 
@@ -24,7 +24,7 @@ The initial controlled production deployment is complete, but the repository is 
 | Frontend                                                         | Reviewed static build is deployed to Storage and served through Front Door                                               | Retain build provenance and use Azure AD data-plane upload authorization for future releases.                            |
 | Entra production redirects and providers                         | Production redirect/sign-out behavior, Google sign-in, and Microsoft Account sign-in were human-validated                | Keep External ID changes separately authorized and repeat human authentication checks after relevant changes.            |
 | OpenWeather                                                      | Backend-only integration is operational after the active key was validated and only `openweather-api-key` was reconciled | Never expose the key to frontend assets or logs; use Key Vault and remove temporary access after maintenance.            |
-| CI/CD                                                            | Deferred                                                                                                                 | Manual controlled deployment remains gated until CI/CD and release automation receive separate review.                   |
+| CI and CD                                                        | Validation-only GitHub Actions CI is implemented; CD is deferred                                                         | Manual controlled deployment remains gated until release automation receives separate review.                            |
 
 ## Local tooling prerequisites
 
@@ -340,9 +340,9 @@ Unexpected spend requires immediate notification to the budget owner and collect
 - [ ] Cost monitoring/alerts, operational ownership, incident contacts, backup retention, and recovery procedures are confirmed.
 - [ ] Final deployment evidence and approvals are stored in the approved system without state or secrets.
 
-## Deferred CI/CD work
+## Deferred delivery automation work
 
-CI/CD is not implemented. A future design must separately review:
+The validation-only GitHub Actions CI workflow does not deploy. CD is not implemented; a future delivery design must separately review:
 
 - workload-identity/OIDC authentication and environment protections;
 - remote-state access and plan/apply separation;

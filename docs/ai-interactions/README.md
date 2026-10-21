@@ -25,3 +25,4 @@ Implementation results are reviewed by a human before approval. Follow-up correc
 - [017 - Production Backend Migration and Activation](./017-production-backend-migration-and-activation.md)
 - [018 - Production Backend Migration Retry](./018-production-backend-migration-retry.md)
 - [019 - OpenWeather Production-Key Reconciliation](./019-openweather-production-key-reconciliation.md)
+- [020 - GitHub Actions CI](./020-github-actions-ci.md)

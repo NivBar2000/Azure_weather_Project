@@ -214,6 +214,10 @@ npm run format
 
 Use `npm run format:check` to verify formatting without changing files.
 
+## Continuous integration
+
+The GitHub Actions workflow at `.github/workflows/ci.yml` runs on pull requests to `main`, pushes to `main`, and manual dispatch. Its parallel jobs validate the application, build the backend container locally, and format/validate Terraform without deployment credentials, artifact publishing, registry pushes, Azure access, or CD.
+
 ## Implementation status
 
 ### Implemented
@@ -228,9 +232,10 @@ Use `npm run format:check` to verify formatting without changing files.
 - Authenticated immutable saved forecasts and personal cursor-paginated history
 - Production Azure Terraform configuration and operating documentation
 - Operational Azure production infrastructure, frontend, private database, backend, authentication, and OpenWeather flow
+- GitHub Actions CI for application, backend-container, dependency-audit, and Terraform validation
 
 ### Deferred
 
-- CI/CD
+- Continuous deployment (CD)
 - A persistent, controlled production migration runner
 - Distributed caching
