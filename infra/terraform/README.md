@@ -110,6 +110,8 @@ PostgreSQL has no public network access. App Service resolves its private FQDN t
 
 ## Cost and security choices
 
+The dated [production cost estimate](../../docs/azure-cost-estimate.md) records the public-price assumptions, per-service monthly calculation, regional comparison, monitoring cost sensitivity, and availability-versus-cost alternatives. Refresh that estimate before budget approval or a material SKU, retention, scaling, or availability change.
+
 - P0v3 with two to four App Service instances and zone-redundant General Purpose PostgreSQL are the primary cost drivers.
 - Front Door Standard is the selected cost-focused profile. Front Door Premium with Private Link origins and a managed WAF policy is the stronger, higher-cost alternative; it would replace Standard rather than run beside it.
 - ACR Basic is the default. A private ACR endpoint requires Premium and additional private DNS/network resources.

@@ -127,6 +127,8 @@ Exact prices are intentionally not stated because they vary by agreement, usage,
 - Front Door request/egress volume;
 - Log Analytics ingestion and retention.
 
+The dated [production cost estimate](./azure-cost-estimate.md) provides the current per-service calculation, Sweden Central comparison with North Europe and West Europe, monitoring coverage and ingestion sensitivity, and the quantified cost of the availability choices. It is an estimate based on public USD retail rates rather than an invoice or binding quote.
+
 Front Door Standard is the cost-focused selection. Premium adds stronger WAF and Private Link origin options at higher cost. ACR Basic is the default; ACR private endpoints require Premium and additional networking/private DNS. Storage uses LRS. PostgreSQL geo-redundant backup is off by default for cost control, while seven-day local point-in-time backups and zone-redundant HA remain enabled.
 
 ## Manual CD deployment order

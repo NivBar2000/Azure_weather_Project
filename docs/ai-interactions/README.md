@@ -36,3 +36,4 @@ Implementation results are reviewed by a human before approval. Follow-up correc
 - [028 - Single-Day Forecast Experience](./028-single-day-forecast-experience.md)
 - [029 - Front Door Custom Domain Stage 1](./029-front-door-custom-domain-stage-1.md)
 - [030 - Front Door Custom Domain Stage 2](./030-front-door-custom-domain-stage-2.md)
+- [031 - Azure Production Cost Estimate](./031-azure-production-cost-estimate.md)
