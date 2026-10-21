@@ -5,6 +5,13 @@ resource "azurerm_log_analytics_workspace" "production" {
   sku                 = "PerGB2018"
   retention_in_days   = var.log_analytics_retention_days
   tags                = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 resource "azurerm_application_insights" "backend" {
@@ -14,6 +21,13 @@ resource "azurerm_application_insights" "backend" {
   workspace_id        = azurerm_log_analytics_workspace.production.id
   application_type    = "web"
   tags                = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 resource "azurerm_monitor_diagnostic_setting" "backend" {

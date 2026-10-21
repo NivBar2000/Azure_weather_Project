@@ -6,4 +6,11 @@ resource "azurerm_container_registry" "backend" {
   admin_enabled                 = false
   public_network_access_enabled = true
   tags                          = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }

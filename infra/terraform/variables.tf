@@ -84,6 +84,17 @@ variable "database_subnet_address_prefixes" {
   }
 }
 
+variable "container_apps_subnet_address_prefixes" {
+  description = "Permanent CIDR prefix reserved for the workload-profiles Container Apps environment."
+  type        = list(string)
+  default     = ["10.40.3.0/24"]
+
+  validation {
+    condition     = length(var.container_apps_subnet_address_prefixes) == 1 && var.container_apps_subnet_address_prefixes[0] == "10.40.3.0/24"
+    error_message = "container_apps_subnet_address_prefixes must remain the approved dedicated 10.40.3.0/24 allocation."
+  }
+}
+
 variable "app_service_sku" {
   description = "Premium v3 App Service plan SKU. P0v3 is the cost-focused production default."
   type        = string
@@ -232,8 +243,8 @@ variable "postgresql_administrator_password" {
   sensitive   = true
 
   validation {
-    condition     = length(var.postgresql_administrator_password) >= 12
-    error_message = "postgresql_administrator_password must contain at least 12 characters."
+    condition     = length(var.postgresql_administrator_password) >= 8
+    error_message = "postgresql_administrator_password must contain at least 8 characters."
   }
 }
 

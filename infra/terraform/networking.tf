@@ -4,6 +4,13 @@ resource "azurerm_virtual_network" "production" {
   resource_group_name = data.azurerm_resource_group.production.name
   address_space       = var.vnet_address_space
   tags                = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 resource "azurerm_subnet" "app_service" {
@@ -46,10 +53,37 @@ resource "azurerm_subnet" "postgresql" {
   }
 }
 
+resource "azurerm_subnet" "container_apps" {
+  name                 = "container-apps-environment"
+  resource_group_name  = data.azurerm_resource_group.production.name
+  virtual_network_name = azurerm_virtual_network.production.name
+  address_prefixes     = var.container_apps_subnet_address_prefixes
+
+  service_endpoint {
+    service = "Microsoft.KeyVault"
+  }
+
+  delegation {
+    name = "container-apps-environment-delegation"
+
+    service_delegation {
+      name    = "Microsoft.App/environments"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+    }
+  }
+}
+
 resource "azurerm_private_dns_zone" "postgresql" {
   name                = "${local.name_prefix}.${local.compact_suffix}.postgres.database.azure.com"
   resource_group_name = data.azurerm_resource_group.production.name
   tags                = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "postgresql" {
@@ -58,39 +92,44 @@ resource "azurerm_private_dns_zone_virtual_network_link" "postgresql" {
   virtual_network_id   = azurerm_virtual_network.production.id
   registration_enabled = false
   tags                 = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 check "subnets_are_inside_vnet" {
   assert {
     condition = alltrue([
-      for subnet in concat(var.app_subnet_address_prefixes, var.database_subnet_address_prefixes) :
+      for subnet in local.production_subnet_cidrs :
       anytrue([
         for vnet_cidr in var.vnet_address_space :
         tonumber(split("/", subnet)[1]) >= tonumber(split("/", vnet_cidr)[1]) &&
         cidrhost(vnet_cidr, 0) == cidrhost("${cidrhost(subnet, 0)}/${split("/", vnet_cidr)[1]}", 0)
       ])
     ])
-    error_message = "Every App Service and PostgreSQL subnet prefix must be contained in vnet_address_space."
+    error_message = "Every App Service, PostgreSQL, and Container Apps subnet prefix must be contained in vnet_address_space."
   }
 }
 
 check "subnets_do_not_overlap" {
   assert {
-    condition = alltrue(flatten([
-      for app_cidr in var.app_subnet_address_prefixes : [
-        for database_cidr in var.database_subnet_address_prefixes :
-        !(
-          (
-            tonumber(split("/", app_cidr)[1]) <= tonumber(split("/", database_cidr)[1]) &&
-            cidrhost(app_cidr, 0) == cidrhost("${cidrhost(database_cidr, 0)}/${split("/", app_cidr)[1]}", 0)
-          ) ||
-          (
-            tonumber(split("/", database_cidr)[1]) <= tonumber(split("/", app_cidr)[1]) &&
-            cidrhost(database_cidr, 0) == cidrhost("${cidrhost(app_cidr, 0)}/${split("/", database_cidr)[1]}", 0)
-          )
+    condition = alltrue([
+      for pair in local.production_subnet_pairs :
+      !(
+        (
+          tonumber(split("/", pair.left)[1]) <= tonumber(split("/", pair.right)[1]) &&
+          cidrhost(pair.left, 0) == cidrhost("${cidrhost(pair.right, 0)}/${split("/", pair.left)[1]}", 0)
+        ) ||
+        (
+          tonumber(split("/", pair.right)[1]) <= tonumber(split("/", pair.left)[1]) &&
+          cidrhost(pair.right, 0) == cidrhost("${cidrhost(pair.left, 0)}/${split("/", pair.right)[1]}", 0)
         )
-      ]
-    ]))
-    error_message = "App Service and PostgreSQL subnet prefixes must not overlap."
+      )
+    ])
+    error_message = "App Service, PostgreSQL, and Container Apps subnet prefixes must not overlap."
   }
 }

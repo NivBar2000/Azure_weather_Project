@@ -4,15 +4,17 @@ This root module represents the approved Azure production architecture now deplo
 
 ## What the module defines
 
-- Sweden Central virtual network with separate delegated App Service and PostgreSQL subnets.
+- Sweden Central virtual network with separate delegated App Service, PostgreSQL, and workload-profiles Container Apps subnets. The Container Apps allocation is permanently fixed at `10.40.3.0/24`.
 - Private DNS and private-only PostgreSQL Flexible Server connectivity.
 - Zone-redundant PostgreSQL high availability, seven-day backups by default, and one application database.
 - Azure Container Registry with admin access disabled and managed-identity image pulls.
+- A Consumption workload-profiles Container Apps environment and manual, single-replica TypeORM migration job (`azure-weather-prod-mig-d2cc26`) connected to the private database network.
+- Separate migration-job and GitHub CD user-assigned identities, with GitHub OIDC restricted to the repository's protected `production` Environment.
 - Premium v3 Linux App Service with two baseline workers, zone balancing, CPU autoscale from two through four, regional VNet integration, health checks, and hardened TLS/FTP settings.
 - RBAC-enabled Key Vault with purge protection, subnet-restricted access, and least-privilege secret-read access for the App Service identity.
 - Azure Storage Static Website, Front Door Standard routes, Log Analytics, Application Insights, and focused diagnostic settings.
 
-Terraform intentionally does not create Key Vault secret values, upload frontend files, build or push the backend image, configure Entra, create a custom domain/certificate, create alert notification destinations, or provision the existing resource group/state backend.
+Terraform intentionally does not create Key Vault secret values, upload frontend files, build or push the backend image, create the GitHub Environment or CD workflow, configure Entra External ID, create a custom domain/certificate, create alert notification destinations, or provision the existing resource group/state backend.
 
 ## Required operator inputs
 
@@ -48,14 +50,26 @@ Before an authorized deployment:
 
 1. Confirm provider registration, regional SKU/zone availability, quotas, permissions, the existing resource group, and the secured remote-state container.
 2. Supply reviewed, non-committed variables and deploy the Terraform configuration through an approved process.
-3. Push the backend image with the configured immutable tag to the created ACR. The App Service system identity receives `AcrPull`; no registry admin credentials are used.
+3. Push the backend image with the configured immutable tag to the created ACR. The App Service and migration-job identities receive scoped `AcrPull`; no registry admin credentials are used.
 4. Seed the versionless Key Vault secret names out of band. `openweather-api-key` contains the private OpenWeather key. `postgresql-administrator-password` must contain the exact password supplied to Terraform for PostgreSQL creation. Terraform never creates or reads either secret value.
-5. Before a new backend version receives production traffic, execute its pending TypeORM migrations exactly once from a separately reviewed, network-connected deployment/release mechanism. The multi-instance App Service must not run migrations during container startup.
-6. Start or update the App Service only after the one-shot migration succeeds, then verify identity propagation, ACR pull, Key Vault reference resolution, health, and private database connectivity. Terraform does not override the image command: the existing Docker `CMD` starts compiled Node directly as PID 1.
-7. Build the frontend with the approved public Entra settings and upload `apps/frontend/dist` to the storage account's `$web` container outside Terraform.
-8. Add the `front_door_endpoint_url` output plus its trailing-slash form where required to the Entra SPA redirect URI and post-logout redirect configuration, then perform human authentication checks.
+5. Update the manual migration job to the same immutable image, start exactly one execution, and require successful completion. It runs `npm run migration:run:prod --workspace=@azure-weather/backend` with no scheduled trigger or automatic retry. The multi-instance App Service must not run migrations during startup.
+6. Update the App Service image only after migration success, then verify identity propagation, ACR pull, Key Vault reference resolution, health, and private database connectivity. Terraform does not override the application image command: the existing Docker `CMD` starts compiled Node directly as PID 1.
+7. Build the frontend with the approved public Entra settings and upload `apps/frontend/dist` to the storage account's `$web` container using Entra data-plane authentication.
+8. Purge the Front Door endpoint if stale content requires it, then run health, routing, authentication, and application checks.
 
-The initial image push, one-shot production migration, secret seeding, frontend build/upload, and Entra updates were completed through separately reviewed manual deployment interactions. The deployed infrastructure, frontend, database schema, backend, authentication, and OpenWeather flow are operational. A persistent production migration runner and CI/CD are not implemented, so future releases still require separately reviewed manual procedures. Compose retains its local-only migration startup behavior. Terraform state does not contain application build artifacts.
+The initial image push, one-shot production migration, secret seeding, frontend build/upload, and Entra updates were completed through separately reviewed manual deployment interactions. The deployed infrastructure, frontend, database schema, backend, authentication, and OpenWeather flow are operational. This configuration now defines the persistent migration runner and GitHub OIDC/RBAC foundation, but neither has been applied and the CD workflow remains unimplemented. Future releases remain manual until both infrastructure and workflow receive separate plan/deployment approval. Compose retains its local-only migration startup behavior. Terraform state does not contain application build artifacts.
+
+## CD identity, trust boundary, and image ownership
+
+The federated credential accepts only `repo:NivBar2000/Azure_weather_Project:environment:production`. GitHub must still create and protect that Environment before a later workflow can authenticate. The GitHub identity receives resource-scoped `AcrPush`, App Service `Website Contributor`, `$web` `Storage Blob Data Contributor`, Front Door endpoint `CDN Profile Contributor`, and migration-job `Container Apps Jobs Contributor`. It receives no subscription/resource-group Contributor, Owner, User Access Administrator, Key Vault role, database credential output, or Terraform-state permission.
+
+The approved trust model explicitly accepts that migration-job update/start permission gives the protected GitHub identity effective use of the job's database secret and attached migration identity. Azure does not provide a field-level RBAC boundary that permits image-only job updates or disables execution overrides. As the backend image deployment principal, the same identity can also deploy code that runs with the App Service's runtime configuration. It is therefore a trusted production release principal even though it has no direct Key Vault role. GitHub Environment reviewers, minimal workflow permissions, immutable digests, concurrency controls, and sanitized logs are mandatory compensating controls.
+
+Terraform owns the registry configuration, identities, secret reference, command, environment variables, networking, health/access settings, and all other runtime infrastructure. CD owns only deployed image revisions. Narrow lifecycle rules ignore `site_config[0].application_stack[0].docker_image_name` for App Service and `template[0].container[0].image` for the migration job.
+
+## Tag ownership
+
+Terraform owns every project-defined tag in `local.common_tags`. Azure or an external governance process owns only the automatically applied `created_By` and `created_Date` keys. Each taggable managed resource ignores drift for exactly `tags["created_By"]` and `tags["created_Date"]`; the complete `tags` map is never ignored, so changes to application, environment, owner, cost-center, workload, and other declared tags remain visible and managed by Terraform.
 
 Because the vault denies unlisted networks, secret seeding must run from an explicitly approved network path (for example, a controlled deployment runner with temporary reviewed access). Do not permanently broaden the vault firewall for convenience. The frontend uploader likewise needs a separately assigned least-privilege Storage Blob Data Contributor role; this workload module does not grant deployment-operator access.
 
@@ -79,5 +93,6 @@ PostgreSQL has no public network access. App Service resolves its private FQDN t
 - Storage uses locally redundant Standard storage and remains publicly readable through its static website endpoint because Standard Front Door cannot use Private Link origins.
 - PostgreSQL geo-redundant backup is disabled by default for cost control; zone-redundant HA and local point-in-time backups remain enabled.
 - Diagnostic ingestion and retention generate usage costs. No alerts are created because no notification destination was provided.
+- The workload-profiles Container Apps environment and migration executions can add environment, networking, execution, and Log Analytics usage charges. The dedicated `/24` also consumes VNet address space permanently.
 
-See [Azure infrastructure](../../docs/azure-infrastructure.md) for the complete architecture, operational prerequisites, limitations, and deferred work. Interaction 012 created configuration only; it did not deploy Azure resources.
+See [Azure infrastructure](../../docs/azure-infrastructure.md) for the complete architecture, operational prerequisites, limitations, and deferred work. Interaction 012 created the original configuration without deploying it; Interaction 021 extends the configuration but likewise performs no Azure mutation.

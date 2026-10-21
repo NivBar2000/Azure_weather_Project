@@ -3,6 +3,13 @@ resource "azurerm_cdn_frontdoor_profile" "production" {
   resource_group_name = data.azurerm_resource_group.production.name
   sku_name            = "Standard_AzureFrontDoor"
   tags                = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 resource "azurerm_cdn_frontdoor_endpoint" "production" {
@@ -10,6 +17,13 @@ resource "azurerm_cdn_frontdoor_endpoint" "production" {
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.production.id
   enabled                  = true
   tags                     = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 resource "azurerm_cdn_frontdoor_origin_group" "frontend" {

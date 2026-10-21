@@ -11,6 +11,13 @@ resource "azurerm_storage_account" "frontend" {
   shared_access_key_enabled       = false
   public_network_access           = "Enabled"
   tags                            = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 resource "azurerm_storage_account_static_website" "frontend" {

@@ -37,3 +37,33 @@ output "log_analytics_workspace_id" {
   description = "Resource ID of the central Log Analytics workspace."
   value       = azurerm_log_analytics_workspace.production.id
 }
+
+output "github_cd_client_id" {
+  description = "Client ID of the GitHub production deployment identity used by future OIDC authentication."
+  value       = azurerm_user_assigned_identity.github_cd.client_id
+}
+
+output "github_cd_principal_id" {
+  description = "Principal ID of the resource-scoped GitHub production deployment identity."
+  value       = azurerm_user_assigned_identity.github_cd.principal_id
+}
+
+output "github_cd_tenant_id" {
+  description = "Microsoft Entra tenant ID for future GitHub OIDC authentication."
+  value       = azurerm_user_assigned_identity.github_cd.tenant_id
+}
+
+output "github_cd_subscription_id" {
+  description = "Azure subscription ID containing the production deployment targets."
+  value       = data.azurerm_client_config.current.subscription_id
+}
+
+output "migration_job_name" {
+  description = "Manual Container Apps Job that future CD updates and starts for one-shot migrations."
+  value       = azurerm_container_app_job.migration.name
+}
+
+output "container_app_environment_name" {
+  description = "Workload-profiles Container Apps environment hosting the migration job."
+  value       = azurerm_container_app_environment.migration.name
+}

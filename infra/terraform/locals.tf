@@ -8,6 +8,14 @@ locals {
   names = {
     app_service_plan = "${local.name_prefix}-asp-${local.compact_suffix}"
     backend_app      = "${local.name_prefix}-api-${local.compact_suffix}"
+    container_app_environment = substr(
+      "${local.name_prefix}-cae-${local.compact_suffix}",
+      0,
+      60,
+    )
+    migration_job      = "${local.name_prefix}-mig-${local.compact_suffix}"
+    migration_identity = "${local.name_prefix}-migration-mi-${local.compact_suffix}"
+    github_cd_identity = "${local.name_prefix}-github-cd-mi-${local.compact_suffix}"
     container_registry = substr(
       "${local.compact_prefix}acr${local.compact_suffix}",
       0,
@@ -42,6 +50,22 @@ locals {
     var.tags,
   )
 
-  front_door_origin = "https://${azurerm_cdn_frontdoor_endpoint.production.host_name}"
-  backend_image     = "${var.backend_image_repository}:${var.backend_image_tag}"
+  front_door_origin         = "https://${azurerm_cdn_frontdoor_endpoint.production.host_name}"
+  backend_image             = "${var.backend_image_repository}:${var.backend_image_tag}"
+  backend_image_fqdn        = "${azurerm_container_registry.backend.login_server}/${local.backend_image}"
+  frontend_web_container_id = "${azurerm_storage_account.frontend.id}/blobServices/default/containers/$web"
+
+  production_subnet_cidrs = concat(
+    var.app_subnet_address_prefixes,
+    var.database_subnet_address_prefixes,
+    var.container_apps_subnet_address_prefixes,
+  )
+  production_subnet_pairs = flatten([
+    for left_index, left_cidr in local.production_subnet_cidrs : [
+      for right_index, right_cidr in local.production_subnet_cidrs : {
+        left  = left_cidr
+        right = right_cidr
+      } if left_index < right_index
+    ]
+  ])
 }

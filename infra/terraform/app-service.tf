@@ -7,6 +7,13 @@ resource "azurerm_service_plan" "backend" {
   worker_count           = var.app_service_minimum_instances
   zone_balancing_enabled = true
   tags                   = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
 
 resource "azurerm_linux_web_app" "backend" {
@@ -77,6 +84,12 @@ resource "azurerm_linux_web_app" "backend" {
   }
 
   lifecycle {
+    ignore_changes = [
+      site_config[0].application_stack[0].docker_image_name,
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+
     precondition {
       condition     = var.app_service_minimum_instances <= var.app_service_maximum_instances
       error_message = "app_service_minimum_instances must not exceed app_service_maximum_instances."
@@ -160,4 +173,11 @@ resource "azurerm_monitor_autoscale_setting" "backend" {
   }
 
   tags = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }

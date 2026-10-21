@@ -10,10 +10,20 @@ resource "azurerm_key_vault" "production" {
   public_network_access_enabled = true
 
   network_acls {
-    bypass                     = "AzureServices"
-    default_action             = "Deny"
-    virtual_network_subnet_ids = [azurerm_subnet.app_service.id]
+    bypass         = "AzureServices"
+    default_action = "Deny"
+    virtual_network_subnet_ids = [
+      azurerm_subnet.app_service.id,
+      azurerm_subnet.container_apps.id,
+    ]
   }
 
   tags = local.common_tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_By"],
+      tags["created_Date"],
+    ]
+  }
 }
