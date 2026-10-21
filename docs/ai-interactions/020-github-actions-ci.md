@@ -281,8 +281,8 @@ ci: add GitHub Actions validation workflow
 
 ## Human Review
 
-The workflow works as expected. by push and manuly 
+The workflow works as expected. by push and manuly
 
 ## Final Status
 
-Aproved 
+Aproved
