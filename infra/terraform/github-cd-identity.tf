@@ -17,7 +17,7 @@ resource "azurerm_federated_identity_credential" "github_production" {
   user_assigned_identity_id = azurerm_user_assigned_identity.github_cd.id
   audience                  = ["api://AzureADTokenExchange"]
   issuer                    = "https://token.actions.githubusercontent.com"
-  subject                   = "repo:NivBar2000/Azure_weather_Project:environment:production"
+  subject                   = "repo:NivBar2000@262624074/Azure_weather_Project@1426703721:environment:production"
 }
 
 resource "azurerm_role_assignment" "github_acr_push" {

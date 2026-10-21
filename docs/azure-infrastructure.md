@@ -82,7 +82,9 @@ The Entra tenant/client identifiers and OIDC URLs are public environment configu
 
 The migration job has a dedicated user-assigned identity with only `AcrPull` at ACR and `Key Vault Secrets User` at the production vault. Its versionless secret reference supplies only `DATABASE_PASSWORD`; the job also receives the five non-secret database connection settings and no OpenWeather or application-authentication configuration.
 
-The separate GitHub CD identity trusts only `repo:NivBar2000/Azure_weather_Project:environment:production`. Its assignments are scoped to ACR (`AcrPush`), the backend App Service (`Website Contributor`), the frontend `$web` container (`Storage Blob Data Contributor`), the Front Door endpoint (`CDN Profile Contributor`), and the migration job (`Container Apps Jobs Contributor`). It has no direct Key Vault role, database output, Terraform-state permission, or broad subscription/resource-group role.
+The separate GitHub CD identity trusts only the immutable GitHub subject observed from the protected Environment: `repo:NivBar2000@262624074/Azure_weather_Project@1426703721:environment:production`. Its assignments are scoped to ACR (`AcrPush`), the backend App Service (`Website Contributor`), the frontend `$web` container (`Storage Blob Data Contributor`), the Front Door endpoint (`CDN Profile Contributor`), and the migration job (`Container Apps Jobs Contributor`). It has no direct Key Vault role, database output, Terraform-state permission, or broad subscription/resource-group role.
+
+The first CD run failed safely during OIDC authentication with `AADSTS700213`, before any deployment step, because the configured federated credential used GitHub's obsolete name-only subject form. Terraform now contains the observed immutable owner/repository-ID subject above; that correction still requires a separately reviewed targeted plan and apply before the CD retry.
 
 Trust model 1 is an explicit accepted risk: job update/start permission allows the protected GitHub identity to make effective use of the migration job's database secret and attached identity, even though it cannot read Key Vault directly. Azure RBAC cannot constrain a job write to only the image field or disable execution overrides. Control of the backend image similarly makes this identity a trusted production release principal capable of running code with App Service runtime configuration. Required Environment reviewers are unavailable on the current private-repository plan; manual dispatch, exact original-actor, triggering-actor, and main-ref checks, the Environment-scoped OIDC subject, immutable image digests, workflow concurrency, minimal permissions, and sanitized logs are the compensating controls.
 
@@ -124,17 +126,17 @@ Front Door Standard is the cost-focused selection. Premium adds stronger WAF and
 
 ## Manual CD prerequisites and deployment order
 
-Before the first human-triggered workflow run:
+Before the next human-triggered workflow run:
 
 1. Verify the existing resource group, provider registrations, Sweden Central SKU/zone availability, subscription quotas, RBAC permissions, and a secured remote-state container.
 2. Review and supply non-committed variables, including a globally unique suffix, immutable image tag, PostgreSQL administrator password, and public Entra configuration.
-3. Initialize the remote backend and execute review/deployment commands only in a separately approved interaction.
+3. Initialize the remote backend and review a plan targeted only to `azurerm_federated_identity_credential.github_production`; apply the saved plan only after separate approval.
 4. Confirm the `production` GitHub Environment and every documented public repository variable without placing credentials in GitHub secrets or `VITE_*` values.
 5. Seed the two configured Key Vault secrets out of band without exposing their values in Terraform or logs.
 6. From GitHub Actions, manually select **Production CD**, choose `main`, verify the exact commit, and run it as `NivBar2000`.
 7. Review the sanitized summary and live evidence for the ACR digest, one migration execution, App Service health, frontend deployment, Front Door purge, and public smoke checks.
 
-The persistent migration and OIDC/RBAC foundations are represented in Terraform but not yet applied or live-validated. The separately maintained CD workflow owns immutable backend image build/push, the exactly-once migration gate, App Service image updates, frontend build/upload, Front Door purge, and post-deployment smoke tests. It has no Terraform-state or direct Key Vault access and does not run Terraform.
+The persistent migration and OIDC/RBAC foundations are represented in Terraform. The first CD attempt confirmed the GitHub Environment's immutable subject claim but failed safely at federation before deployment; the corrected federated credential remains pending reviewed deployment and retry. The separately maintained CD workflow owns immutable backend image build/push, the exactly-once migration gate, App Service image updates, frontend build/upload, Front Door purge, and post-deployment smoke tests. It has no Terraform-state or direct Key Vault access and does not run Terraform.
 
 Failure boundaries are deliberate. Migration failure stops before App Service or frontend changes. Backend restart/health failure triggers a best-effort restore of the previous image, but a successful migration is never reversed automatically and schema compatibility is not guaranteed. Frontend uploads overwrite matching files but are not atomic; purge or smoke failure does not restore previous static content. Recovery after those points requires a separately authorized known-good release.
 

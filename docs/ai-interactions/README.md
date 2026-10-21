@@ -32,3 +32,4 @@ Implementation results are reviewed by a human before approval. Follow-up correc
 - [024 - Azure-Managed Tag Drift](./024-azure-managed-tag-drift.md)
 - [025 - Production GitHub Actions CD](./025-production-github-actions-cd.md)
 - [026 - Production CD Re-run Authorization](./026-production-cd-rerun-authorization.md)
+- [027 - GitHub OIDC Immutable Subject Correction](./027-github-oidc-immutable-subject.md)

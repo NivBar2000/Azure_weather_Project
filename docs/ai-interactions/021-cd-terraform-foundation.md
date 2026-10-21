@@ -578,3 +578,7 @@ Awaiting human review
 ### Review Note: Migration Job Name-Length Correction
 
 The historical preflight response above proposed `azure-weather-prod-migrate-d2cc26`; it is preserved verbatim under the interaction-log rules. Before any plan or deployment, Interaction 023 corrected the implemented Terraform name to `azure-weather-prod-mig-d2cc26`, which is the sole effective migration-job name for this foundation.
+
+### Review Note: Immutable GitHub OIDC Subject Correction
+
+The historical prompts and reports above specify GitHub's former name-only subject `repo:NivBar2000/Azure_weather_Project:environment:production`; they remain preserved verbatim. The first CD run later failed safely with `AADSTS700213` before deployment and reported the immutable subject `repo:NivBar2000@262624074/Azure_weather_Project@1426703721:environment:production`. Interaction 027 updates only the Terraform federated credential subject to that observed claim; the correction remains pending human review and deployment.
