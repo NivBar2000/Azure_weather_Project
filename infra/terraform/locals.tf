@@ -20,7 +20,7 @@ locals {
       46,
     )
     front_door_profile   = "${local.name_prefix}-afd-${local.compact_suffix}"
-    key_vault            = "${substr(local.name_prefix, 0, 20 - length(local.compact_suffix))}-kv-${local.compact_suffix}"
+    key_vault            = "${trim(substr(local.name_prefix, 0, 20 - length(local.compact_suffix)), "-")}-kv-${local.compact_suffix}"
     log_analytics        = "${local.name_prefix}-law-${local.compact_suffix}"
     application_insights = "${local.name_prefix}-appi-${local.compact_suffix}"
     postgresql = substr(

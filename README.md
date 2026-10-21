@@ -102,9 +102,9 @@ The local Nginx and PostgreSQL containers are development and integration-test i
 
 ## Production Azure infrastructure
 
-The reviewable Terraform root module under `infra/terraform` represents the approved Sweden Central production architecture. It defines Front Door Standard, Storage Static Website, a managed-identity App Service/ACR path, private zone-redundant PostgreSQL, Key Vault, networking, autoscale, and monitoring. It reads an existing resource group and does not manage Entra External ID.
+The Terraform root module under `infra/terraform` defines the deployed Sweden Central production architecture: Front Door Standard, Storage Static Website, a managed-identity App Service/ACR path, private zone-redundant PostgreSQL, Key Vault, networking, autoscale, and monitoring. It reads an existing resource group and does not manage Entra External ID.
 
-No Azure resource has been provisioned. See [Azure infrastructure](docs/azure-infrastructure.md) for topology and security/cost decisions, [Azure deployment readiness](docs/azure-deployment-readiness.md) for the controlled future runbook and approval gates, and the [Terraform README](infra/terraform/README.md) for safe placeholders and local validation.
+The production infrastructure, frontend, database migrations, backend, Microsoft Entra External ID authentication, and backend-only OpenWeather integration are operational. Human validation covered Google and Microsoft Account sign-in, city search and live forecasts, saved-forecast create/list/detail behavior, cross-user isolation with two identities, and sign-out. See [Azure infrastructure](docs/azure-infrastructure.md) for topology and security/cost decisions, [Azure deployment readiness](docs/azure-deployment-readiness.md) for deployment evidence and the controlled runbook, and the [Terraform README](infra/terraform/README.md) for safe placeholders and local validation.
 
 Safe non-deploying validation:
 
@@ -227,9 +227,10 @@ Use `npm run format:check` to verify formatting without changing files.
 - Microsoft Entra External ID authentication and privacy-safe user synchronization
 - Authenticated immutable saved forecasts and personal cursor-paginated history
 - Production Azure Terraform configuration and operating documentation
+- Operational Azure production infrastructure, frontend, private database, backend, authentication, and OpenWeather flow
 
 ### Deferred
 
-- Actual Azure provisioning
 - CI/CD
+- A persistent, controlled production migration runner
 - Distributed caching

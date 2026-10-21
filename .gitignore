@@ -42,3 +42,8 @@ crash.*.log
 # Safe Terraform examples are committed
 !**/*.tfvars.example
 !**/backend.hcl.example
+
+# Saved Terraform plans may contain sensitive values
+**/tfplan
+**/tfplan-*
+**/*.tfplan

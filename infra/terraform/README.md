@@ -1,6 +1,6 @@
 # Production Azure Terraform foundation
 
-This root module represents the approved Azure production architecture without provisioning it. The existing resource group and manually configured Microsoft Entra External ID tenant/app registrations are inputs, not managed resources.
+This root module represents the approved Azure production architecture now deployed in Sweden Central. The existing resource group and manually configured Microsoft Entra External ID tenant/app registrations are inputs, not managed resources.
 
 ## What the module defines
 
@@ -40,7 +40,7 @@ terraform init -backend=false
 terraform validate
 ```
 
-When an authorized deployment interaction is scheduled later, initialize the secured backend using an untracked copy of `backend.hcl.example`. Do not run `plan` or any deployment command merely to validate this foundation.
+For a future authorized infrastructure change, initialize the secured backend using an untracked copy of `backend.hcl.example`. Do not run `plan` or any deployment command merely to validate this configuration.
 
 ## Deployment prerequisites and order
 
@@ -55,9 +55,11 @@ Before an authorized deployment:
 7. Build the frontend with the approved public Entra settings and upload `apps/frontend/dist` to the storage account's `$web` container outside Terraform.
 8. Add the `front_door_endpoint_url` output plus its trailing-slash form where required to the Entra SPA redirect URI and post-logout redirect configuration, then perform human authentication checks.
 
-The image push, one-shot production migration runner, secret seeding, frontend build/upload, and Entra updates are later manual or CI/CD responsibilities. The migration runner and CI/CD are not implemented by this foundation, and production migrations are not currently automated. Compose retains its local-only migration startup behavior. Terraform state does not contain application build artifacts.
+The initial image push, one-shot production migration, secret seeding, frontend build/upload, and Entra updates were completed through separately reviewed manual deployment interactions. The deployed infrastructure, frontend, database schema, backend, authentication, and OpenWeather flow are operational. A persistent production migration runner and CI/CD are not implemented, so future releases still require separately reviewed manual procedures. Compose retains its local-only migration startup behavior. Terraform state does not contain application build artifacts.
 
 Because the vault denies unlisted networks, secret seeding must run from an explicitly approved network path (for example, a controlled deployment runner with temporary reviewed access). Do not permanently broaden the vault firewall for convenience. The frontend uploader likewise needs a separately assigned least-privilege Storage Blob Data Contributor role; this workload module does not grant deployment-operator access.
+
+The AzureRM provider sets `storage_use_azuread = true` so its Storage Blob/Queue data-plane operations use Microsoft Entra authentication while Shared Key remains disabled. Before Terraform creates or updates the frontend static-website configuration, grant the Terraform execution identity an appropriate Storage Blob data-plane role, normally Storage Blob Data Contributor, at the frontend storage-account scope. That operator permission is managed separately and is intentionally not assigned by this workload module.
 
 ## Traffic, routing, and dependencies
 

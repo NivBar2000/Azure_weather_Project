@@ -2,28 +2,29 @@
 
 ## Scope and current status
 
-This document is the pre-deployment audit and operator runbook for the approved Terraform foundation in `infra/terraform`. It describes what must be prepared, verified, approved, and executed during a future authorized Azure deployment.
+This document records the initial production deployment outcome and retains the controlled operator runbook for future authorized infrastructure changes and application releases.
 
-> **Interaction 013 performs no Azure deployment.** It does not connect Terraform to a real backend, authenticate to Azure, query live Azure context, run a plan or apply, create costs, push artifacts, seed secrets, change Entra, or run production migrations.
+> **Historical context:** Interaction 013 performed no Azure deployment. Later reviewed interactions provisioned the infrastructure, deployed the artifacts, seeded secrets, configured Entra, and ran the initial production migrations.
 
-The Terraform configuration is implemented and locally valid. Actual Azure provisioning remains deferred. The future operator must treat every gate below as a stop/go decision and retain evidence of the human approval that permits the next phase.
+The Sweden Central infrastructure, frontend, database migrations, backend, Microsoft Entra External ID authentication, and backend-only OpenWeather integration are operational. Human browser validation on 2026-10-21 succeeded for Google and Microsoft Account sign-in, city search and live forecasts, saved-forecast create/list/detail behavior, isolation between two identities, and sign-out. CI/CD and a persistent production migration runner remain deferred; future changes must continue to use the stop/go gates below and retain human approval evidence.
 
 ## Readiness findings and blockers
 
-The repository is structurally ready for a controlled deployment review, but it is not ready for an unattended production release.
+The initial controlled production deployment is complete, but the repository is not ready for an unattended production release.
 
-| Finding                                                          | Current status                                                                                                        | Required disposition before deployment                                                                                |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Terraform configuration                                          | Locally valid with Terraform 1.15.6 and locked AzureRM 5.10.0                                                         | Revalidate from the approved release environment.                                                                     |
-| Azure tenant, subscription, providers, quotas, and regional SKUs | Not queried in Interaction 013                                                                                        | Verify with authenticated read-only Azure checks and retain results.                                                  |
-| Cost estimate                                                    | Not produced                                                                                                          | Create a current Azure Pricing Calculator estimate and obtain explicit human approval.                                |
-| Remote state                                                     | Example only; no real backend configured                                                                              | Approve a bootstrap approach and prepare the secured backend before plan/apply.                                       |
-| Docker build/push                                                | Docker client is installed locally, but its daemon is inaccessible in the current environment                         | Restore or select an approved build environment before release work.                                                  |
-| Key Vault secret seeding                                         | Terraform creates no secret values; the vault firewall permits the App Service subnet and trusted-service bypass only | Approve a network-reachable, least-privilege seeding mechanism. Do not open the vault broadly for convenience.        |
-| Production migrations                                            | Correctly absent from App Service startup; no production runner exists                                                | Design and approve an exactly-once runner with private PostgreSQL DNS/network access. This is a hard go-live blocker. |
-| Frontend/backend artifacts                                       | No deployment artifacts are managed by Terraform                                                                      | Build, scan, retain, and deploy immutable release artifacts through a future controlled process.                      |
-| Entra production redirects                                       | Front Door URL does not exist yet                                                                                     | Add the generated URL only after infrastructure/artifact readiness, through an authorized Entra operator.             |
-| CI/CD                                                            | Deferred                                                                                                              | Manual controlled deployment must remain gated until CI/CD and release automation receive separate review.            |
+| Finding                                                          | Current status                                                                                                           | Required disposition for future changes                                                                                  |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Terraform configuration                                          | Deployed and retained as the reviewable infrastructure definition                                                        | Revalidate from the approved release environment before each infrastructure change.                                      |
+| Azure tenant, subscription, providers, quotas, and regional SKUs | Verified during the reviewed manual deployment                                                                           | Recheck time-sensitive capacity, quota, provider, and authorization conditions before a future change.                   |
+| Cost estimate and ownership                                      | Deployment completed; ongoing cost governance remains an operational responsibility                                      | Refresh estimates and approval when a future change affects cost.                                                        |
+| Remote state                                                     | Production deployment used the approved secured state workflow; real backend details remain uncommitted                  | Preserve access, locking, recovery, and evidence controls for every Terraform operation.                                 |
+| Backend image                                                    | Immutable backend image deployed through ACR; managed-identity pull is operational                                       | Build, scan, retain, and promote future immutable artifacts through a reviewed manual process until CI/CD exists.        |
+| Key Vault secrets                                                | Versionless database and OpenWeather references resolve; temporary human access used during reconciliation was removed   | Continue out-of-band, least-privilege secret maintenance and refresh references after rotation when required.            |
+| Production migrations                                            | Initial migrations completed once through a temporary private runner; App Service does not run migrations at startup     | Implement a persistent controlled runner; until then, approve and clean up a temporary one-shot runner for each release. |
+| Frontend                                                         | Reviewed static build is deployed to Storage and served through Front Door                                               | Retain build provenance and use Azure AD data-plane upload authorization for future releases.                            |
+| Entra production redirects and providers                         | Production redirect/sign-out behavior, Google sign-in, and Microsoft Account sign-in were human-validated                | Keep External ID changes separately authorized and repeat human authentication checks after relevant changes.            |
+| OpenWeather                                                      | Backend-only integration is operational after the active key was validated and only `openweather-api-key` was reconciled | Never expose the key to frontend assets or logs; use Key Vault and remove temporary access after maintenance.            |
+| CI/CD                                                            | Deferred                                                                                                                 | Manual controlled deployment remains gated until CI/CD and release automation receive separate review.                   |
 
 ## Local tooling prerequisites
 
@@ -70,16 +71,16 @@ Do not assume local Terraform validation proves any live subscription, regional 
 
 Use separate identities and narrower roles when duties are separated. Avoid subscription-wide Owner access where scoped roles are sufficient.
 
-| Task                               | Minimum capability to arrange and verify                                                                                                                                                                                                                                           |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Terraform resource deployment      | Create/read/update/delete the declared resource types in the existing resource group, normally through a reviewed custom role or scoped Contributor-equivalent role.                                                                                                               |
-| Terraform-created RBAC assignments | `Microsoft.Authorization/roleAssignments/write` and delete/read permissions at the ACR and Key Vault scopes; Contributor alone is insufficient. Use Role Based Access Control Administrator, User Access Administrator, or a narrower custom role at the smallest practical scope. |
-| Remote-state access                | Azure AD data-plane access sufficient to read/write/list blobs and acquire leases in the dedicated state container, typically Storage Blob Data Contributor scoped to that container or state account, plus any required control-plane read access.                                |
-| Backend image push                 | `AcrPush` on the created registry for the release identity. App Service separately receives only `AcrPull`.                                                                                                                                                                        |
-| Key Vault secret seeding           | Secret write/list metadata capability such as Key Vault Secrets Officer at the vault scope, plus an approved network path. Do not grant the Terraform workload identity secret-write access.                                                                                       |
-| Frontend upload                    | Storage Blob Data Contributor for the `$web` container or the smallest supported equivalent. Shared-key access remains disabled.                                                                                                                                                   |
-| Entra configuration                | Authorized ownership/administration of the existing SPA/API registrations and External ID configuration. This is separate from Azure resource RBAC.                                                                                                                                |
-| Production migration               | Private network/DNS reachability to PostgreSQL and database credentials delivered through an approved secret channel. The runner identity needs no broader Azure rights than its design requires.                                                                                  |
+| Task                               | Minimum capability to arrange and verify                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Terraform resource deployment      | Create/read/update/delete the declared resource types in the existing resource group, normally through a reviewed custom role or scoped Contributor-equivalent role. The Terraform execution identity also needs Storage Blob Data Contributor (or an appropriate equivalent) at the frontend storage-account scope so AzureRM can configure the static website through Microsoft Entra data-plane authentication while Shared Key is disabled. Grant this separately; the workload module does not assign deployment-operator access. |
+| Terraform-created RBAC assignments | `Microsoft.Authorization/roleAssignments/write` and delete/read permissions at the ACR and Key Vault scopes; Contributor alone is insufficient. Use Role Based Access Control Administrator, User Access Administrator, or a narrower custom role at the smallest practical scope.                                                                                                                                                                                                                                                     |
+| Remote-state access                | Azure AD data-plane access sufficient to read/write/list blobs and acquire leases in the dedicated state container, typically Storage Blob Data Contributor scoped to that container or state account, plus any required control-plane read access.                                                                                                                                                                                                                                                                                    |
+| Backend image push                 | `AcrPush` on the created registry for the release identity. App Service separately receives only `AcrPull`.                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Key Vault secret seeding           | Secret write/list metadata capability such as Key Vault Secrets Officer at the vault scope, plus an approved network path. Do not grant the Terraform workload identity secret-write access.                                                                                                                                                                                                                                                                                                                                           |
+| Frontend upload                    | Storage Blob Data Contributor for the `$web` container or the smallest supported equivalent. Shared-key access remains disabled.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Entra configuration                | Authorized ownership/administration of the existing SPA/API registrations and External ID configuration. This is separate from Azure resource RBAC.                                                                                                                                                                                                                                                                                                                                                                                    |
+| Production migration               | Private network/DNS reachability to PostgreSQL and database credentials delivered through an approved secret channel. The runner identity needs no broader Azure rights than its design requires.                                                                                                                                                                                                                                                                                                                                      |
 
 Every temporary elevated assignment must have an owner, justification, expiry/removal step, and evidence of removal after deployment.
 
@@ -150,7 +151,7 @@ At minimum, estimate and review:
 
 Record the estimate date, workload assumptions, budget owner, monthly/annual ranges, alerting expectations, and explicit human approver. A missing, stale, or rejected estimate is a hard stop. Cost approval does not authorize deployment by itself.
 
-## Controlled future deployment runbook
+## Controlled runbook for future changes
 
 Each phase requires recorded evidence and an explicit go decision. A stop condition cannot be waived silently.
 
@@ -192,11 +193,11 @@ Each phase requires recorded evidence and an explicit go decision. A stop condit
 **Go:** two-person review confirms values, classifications, immutable tag, artifact provenance, and no secret leakage.  
 **Stop:** placeholder, mutable `latest`, CIDR conflict, missing secret mechanism, unreviewed public identity values, or non-reproducible artifact.
 
-### Phase 4 - Backend initialization and future plan review
+### Phase 4 - Backend initialization and plan review
 
 1. Initialize Terraform against the approved remote backend using the untracked backend configuration.
 2. Confirm the backend is remote and locking works; do not expose state contents.
-3. Generate a saved plan through the future approved process.
+3. Generate a saved plan through the approved process.
 4. Review every create/change/destroy action, replacement, output, tag, region, SKU, public endpoint, role assignment, and cost impact.
 5. Treat any destroy/replacement, unexpected data-source target, or secret-like output as a stop condition.
 
@@ -236,7 +237,7 @@ Only after ACR, Key Vault, and Storage exist:
 **Go:** the migration completes once, the expected migration list/schema is present, and the recovery owner accepts the result.  
 **Stop:** runner/network/DNS/credential uncertainty, concurrent runner possibility, migration error, unexpected schema, or missing recovery decision. Do not send traffic to the new backend.
 
-This runner does not exist today and must be designed and approved before a real deployment.
+A persistent runner does not exist. The initial deployment used a reviewed temporary one-shot runner that was removed afterward; future migrations require the same controlled temporary approach until a persistent runner is designed and approved.
 
 ### Phase 8 - Backend activation and health
 
@@ -296,38 +297,38 @@ Unexpected spend requires immediate notification to the budget owner and collect
 
 - [ ] Front Door default/custom production URL serves HTTPS and redirects HTTP to HTTPS.
 - [ ] TLS behavior and headers meet the approved policy.
-- [ ] `/` serves the reviewed React build; asset requests, SPA fallback, compression, and cache behavior are correct.
-- [ ] `/api/*` is routed to App Service and is not cached.
+- [x] `/` serves the reviewed React build; asset requests and SPA routing were validated through Front Door.
+- [x] `/api/*` is routed to App Service; health, authentication rejection, and application requests reached the backend.
 - [ ] Direct Storage endpoint exposure is recorded as the accepted Front Door Standard limitation.
 - [ ] Compiled frontend assets contain no secrets, tokens, private keys, connection strings, database credentials, or OpenWeather key.
 
 ### Backend and origin security
 
-- [ ] `GET /api/health` succeeds through Front Door.
-- [ ] The direct App Service hostname rejects a normal request that lacks the valid Front Door service-tag path/header combination.
-- [ ] SCM remains deny-by-default and does not inherit the Front Door origin allow rule.
-- [ ] The container pulls the exact ACR digest with managed identity; ACR admin remains disabled.
-- [ ] Node starts directly as PID 1 and no App Service instance attempts migrations.
+- [x] `GET /api/health` succeeds through Front Door.
+- [x] The direct App Service hostname rejects a normal request that lacks the valid Front Door service-tag path/header combination.
+- [x] SCM remains deny-by-default and does not inherit the Front Door origin allow rule.
+- [x] The container pulls the exact ACR digest with managed identity; ACR admin remains disabled.
+- [x] Node starts directly as PID 1 and no App Service instance attempts migrations.
 - [ ] App Service has two healthy baseline workers and autoscale bounds of two through four.
 
 ### Database, secrets, and identity
 
-- [ ] PostgreSQL public network access is disabled; no public firewall path exists.
-- [ ] The backend resolves and connects to PostgreSQL through VNet integration/private DNS with TLS.
-- [ ] Exactly the expected TypeORM migrations are recorded after a single runner execution.
-- [ ] Key Vault references resolve for OpenWeather and the database password without printing values.
-- [ ] App Service has only `AcrPull` and Key Vault secret-read workload roles at intended scopes.
-- [ ] Temporary push/secret/upload roles are removed or expired.
+- [x] PostgreSQL public network access is disabled; no public firewall path exists.
+- [x] The backend resolves and connects to PostgreSQL through VNet integration/private DNS with TLS.
+- [x] Exactly the expected TypeORM migrations are recorded after a single runner execution.
+- [x] Key Vault references resolve for OpenWeather and the database password without printing values.
+- [x] App Service has scoped `AcrPull` and Key Vault secret-read workload roles at intended scopes.
+- [x] Temporary migration and OpenWeather-reconciliation roles and firewall access were removed.
 
 ### Authentication and application behavior
 
-- [ ] The exact Front Door URL is present as the SPA redirect and post-logout URI.
-- [ ] Google sign-in completes through Entra External ID.
-- [ ] Microsoft Account sign-in completes through Entra External ID.
-- [ ] Sign-out returns to the approved Front Door origin.
-- [ ] Authenticated weather search and forecast calls succeed through `/api`.
-- [ ] Save/list/detail history works for one test identity.
-- [ ] A second test identity cannot see or fetch the first identity's history; cross-user UUID access returns the intended non-disclosing response.
+- [x] The exact Front Door URL is present as the SPA redirect and post-logout URI.
+- [x] Google sign-in completes through Entra External ID.
+- [x] Microsoft Account sign-in completes through Entra External ID.
+- [x] Sign-out returns to the approved Front Door origin.
+- [x] Authenticated weather search and forecast calls succeed through `/api`.
+- [x] Save/list/detail history works for a test identity.
+- [x] Saved-forecast history remained isolated between two tested identities.
 - [ ] No token, authorization header, raw identity claim, or personal email is written to application logs.
 
 ### Monitoring and operations
@@ -341,7 +342,7 @@ Unexpected spend requires immediate notification to the budget owner and collect
 
 ## Deferred CI/CD work
 
-CI/CD is not implemented by Interaction 013. A future design must separately review:
+CI/CD is not implemented. A future design must separately review:
 
 - workload-identity/OIDC authentication and environment protections;
 - remote-state access and plan/apply separation;
@@ -352,4 +353,4 @@ CI/CD is not implemented by Interaction 013. A future design must separately rev
 - saved-plan approval, deployment locks, artifact promotion, post-deployment tests, evidence retention, and temporary-role cleanup;
 - rollback/cost-containment workflows that never default to destroy.
 
-Until those controls exist, every deployment phase remains a separately approved manual operation. Interaction 013 creates documentation only and performs no Azure deployment.
+Until those controls exist, every future deployment phase remains a separately approved manual operation. A persistent migration runner is likewise deferred; the temporary runner used for the initial migration was removed after successful execution.

@@ -64,7 +64,11 @@ check "subnets_are_inside_vnet" {
   assert {
     condition = alltrue([
       for subnet in concat(var.app_subnet_address_prefixes, var.database_subnet_address_prefixes) :
-      anytrue([for vnet_cidr in var.vnet_address_space : cidrcontains(vnet_cidr, cidrhost(subnet, 0))])
+      anytrue([
+        for vnet_cidr in var.vnet_address_space :
+        tonumber(split("/", subnet)[1]) >= tonumber(split("/", vnet_cidr)[1]) &&
+        cidrhost(vnet_cidr, 0) == cidrhost("${cidrhost(subnet, 0)}/${split("/", vnet_cidr)[1]}", 0)
+      ])
     ])
     error_message = "Every App Service and PostgreSQL subnet prefix must be contained in vnet_address_space."
   }
@@ -75,7 +79,16 @@ check "subnets_do_not_overlap" {
     condition = alltrue(flatten([
       for app_cidr in var.app_subnet_address_prefixes : [
         for database_cidr in var.database_subnet_address_prefixes :
-        !cidrcontains(app_cidr, cidrhost(database_cidr, 0)) && !cidrcontains(database_cidr, cidrhost(app_cidr, 0))
+        !(
+          (
+            tonumber(split("/", app_cidr)[1]) <= tonumber(split("/", database_cidr)[1]) &&
+            cidrhost(app_cidr, 0) == cidrhost("${cidrhost(database_cidr, 0)}/${split("/", app_cidr)[1]}", 0)
+          ) ||
+          (
+            tonumber(split("/", database_cidr)[1]) <= tonumber(split("/", app_cidr)[1]) &&
+            cidrhost(database_cidr, 0) == cidrhost("${cidrhost(app_cidr, 0)}/${split("/", database_cidr)[1]}", 0)
+          )
+        )
       ]
     ]))
     error_message = "App Service and PostgreSQL subnet prefixes must not overlap."
