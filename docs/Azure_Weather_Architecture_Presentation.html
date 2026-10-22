@@ -1,885 +1,1622 @@
 <!doctype html>
 <html lang="he" dir="rtl">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Azure Weather | מהדרישה ל-Production</title>
-  <style>
-    :root {
-      --navy: #071725;
-      --navy-2: #0b2336;
-      --panel: #102b3f;
-      --line: #2f5870;
-      --azure: #43b8ff;
-      --cyan: #69e2d2;
-      --white: #f6fbff;
-      --muted: #a9bfd0;
-      --orange: #ffb35c;
-      --green: #76e3a3;
-      --red: #ff7b7b;
-      --shadow: 0 28px 75px rgba(0,0,0,.35);
-    }
-
-    * { box-sizing: border-box; }
-
-    html, body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      overflow: hidden;
-      background: #020b12;
-      color: var(--white);
-      font-family: "Segoe UI", Arial, sans-serif;
-    }
-
-    body {
-      display: grid;
-      place-items: center;
-      background:
-        radial-gradient(circle at 10% 10%, rgba(67,184,255,.14), transparent 30%),
-        radial-gradient(circle at 88% 90%, rgba(105,226,210,.10), transparent 28%),
-        #020b12;
-    }
-
-    .deck {
-      position: relative;
-      width: min(100vw, calc(100vh * 16 / 9));
-      height: min(100vh, calc(100vw * 9 / 16));
-      aspect-ratio: 16 / 9;
-      overflow: hidden;
-      background: var(--navy);
-      box-shadow: var(--shadow);
-      isolation: isolate;
-    }
-
-    .deck::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
-      background-size: 44px 44px;
-      mask-image: linear-gradient(to bottom, black, transparent 86%);
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .slide {
-      position: absolute;
-      inset: 0;
-      display: none;
-      grid-template-rows: auto 1fr auto;
-      gap: 20px;
-      padding: 56px 70px 38px;
-      background:
-        radial-gradient(circle at 94% 2%, rgba(67,184,255,.14), transparent 28%),
-        linear-gradient(145deg, rgba(7,23,37,.99), rgba(8,29,45,.98));
-      z-index: 1;
-    }
-
-    .slide.active { display: grid; }
-
-    .slide::after {
-      content: attr(data-section);
-      position: absolute;
-      left: 70px;
-      top: 32px;
-      color: rgba(255,255,255,.16);
-      font-size: 14px;
-      letter-spacing: .14em;
-      text-transform: uppercase;
-    }
-
-    header { max-width: 1030px; }
-    .kicker { color: var(--cyan); font-size: 17px; font-weight: 700; letter-spacing: .05em; }
-    h1, h2, h3, p { margin: 0; }
-    h1 { font-size: clamp(44px, 5.1vw, 78px); line-height: 1.05; letter-spacing: -.03em; }
-    h2 { font-size: clamp(32px, 3.15vw, 52px); line-height: 1.08; letter-spacing: -.025em; }
-    h3 { font-size: 22px; line-height: 1.25; }
-    p, li { font-size: clamp(17px, 1.35vw, 22px); line-height: 1.52; }
-    .lead { margin-top: 14px; max-width: 940px; color: var(--muted); font-size: clamp(19px, 1.65vw, 26px); }
-    .small { font-size: 15px; color: var(--muted); }
-    .accent { color: var(--azure); }
-    .mint { color: var(--cyan); }
-    .warm { color: var(--orange); }
-
-    .content { min-height: 0; display: grid; align-items: center; }
-    .two { grid-template-columns: 1fr 1fr; gap: 52px; }
-    .two-wide { grid-template-columns: 1.25fr .75fr; gap: 48px; }
-    .three { grid-template-columns: repeat(3, 1fr); gap: 34px; }
-    .four { grid-template-columns: repeat(4, 1fr); gap: 24px; }
-
-    .rule { height: 1px; background: linear-gradient(90deg, transparent, var(--line), transparent); }
-    .v-rule { width: 1px; height: 76%; align-self: center; background: linear-gradient(transparent, var(--line), transparent); }
-
-    ul { margin: 14px 0 0; padding: 0 25px 0 0; }
-    li { margin: 8px 0; color: #dfeef8; }
-    li::marker { color: var(--azure); }
-
-    .statement {
-      border-right: 5px solid var(--azure);
-      padding: 12px 22px 12px 0;
-      font-size: clamp(23px, 2vw, 32px);
-      line-height: 1.4;
-      font-weight: 650;
-    }
-
-    .metric {
-      padding-top: 18px;
-      border-top: 2px solid var(--line);
-    }
-    .metric .value { display: block; font-size: clamp(34px, 3vw, 54px); font-weight: 800; color: var(--azure); }
-    .metric .label { color: var(--muted); font-size: 17px; line-height: 1.4; }
-
-    .node {
-      position: relative;
-      min-height: 86px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      gap: 6px;
-      padding: 15px 18px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: rgba(14,45,65,.72);
-      box-shadow: 0 12px 28px rgba(0,0,0,.18);
-    }
-    .node strong { font-size: 19px; }
-    .node span { color: var(--muted); font-size: 14px; line-height: 1.35; }
-    .node.azure { border-color: rgba(67,184,255,.75); background: linear-gradient(145deg, rgba(22,78,111,.85), rgba(12,44,65,.9)); }
-    .node.mint { border-color: rgba(105,226,210,.6); }
-    .node.orange { border-color: rgba(255,179,92,.68); }
-
-    .flow {
-      display: flex;
-      align-items: stretch;
-      gap: 0;
-      direction: ltr;
-    }
-    .flow .node { flex: 1; direction: rtl; }
-    .connector {
-      position: relative;
-      flex: 0 0 44px;
-      align-self: center;
-      height: 2px;
-      background: var(--azure);
-      opacity: .85;
-    }
-    .connector::after {
-      content: "";
-      position: absolute;
-      right: -1px;
-      top: -5px;
-      width: 0;
-      height: 0;
-      border-top: 6px solid transparent;
-      border-bottom: 6px solid transparent;
-      border-left: 9px solid var(--azure);
-    }
-
-    .step-list { display: grid; gap: 14px; counter-reset: steps; }
-    .step {
-      position: relative;
-      padding: 10px 62px 10px 10px;
-      min-height: 54px;
-      border-bottom: 1px solid rgba(47,88,112,.75);
-    }
-    .step::before {
-      counter-increment: steps;
-      content: counter(steps, decimal-leading-zero);
-      position: absolute;
-      right: 0;
-      top: 6px;
-      color: var(--azure);
-      font-size: 24px;
-      font-weight: 800;
-    }
-    .step strong { display: block; font-size: 19px; margin-bottom: 4px; }
-    .step span { color: var(--muted); font-size: 15px; line-height: 1.35; }
-
-    .arch {
-      display: grid;
-      grid-template-columns: 1fr 1.05fr 1.15fr 1.15fr 1fr;
-      grid-template-rows: 92px 72px 92px;
-      gap: 16px 22px;
-      direction: ltr;
-      align-items: stretch;
-    }
-    .arch .node { direction: rtl; text-align: right; }
-    .arch .user { grid-column: 1; grid-row: 2; }
-    .arch .front { grid-column: 2; grid-row: 2; }
-    .arch .storage { grid-column: 3; grid-row: 1; }
-    .arch .app { grid-column: 3; grid-row: 3; }
-    .arch .data { grid-column: 4; grid-row: 3; }
-    .arch .weather { grid-column: 4; grid-row: 1; }
-    .arch .ops { grid-column: 5; grid-row: 2; }
-    .arch-line {
-      position: relative;
-      align-self: center;
-      height: 2px;
-      background: linear-gradient(90deg, var(--azure), var(--cyan));
-      opacity: .8;
-    }
-    .arch-line::after {
-      content: "";
-      position: absolute;
-      right: -1px;
-      top: -4px;
-      border-top: 5px solid transparent;
-      border-bottom: 5px solid transparent;
-      border-left: 8px solid var(--cyan);
-    }
-    .arch .l1 { grid-column: 1 / 3; grid-row: 2; z-index: -1; }
-    .arch .l2a { grid-column: 2 / 4; grid-row: 1; transform: rotate(-18deg); transform-origin: left center; z-index: -1; }
-    .arch .l2b { grid-column: 2 / 4; grid-row: 3; transform: rotate(18deg); transform-origin: left center; z-index: -1; }
-    .arch .l3a { grid-column: 3 / 5; grid-row: 1; z-index: -1; }
-    .arch .l3b { grid-column: 3 / 5; grid-row: 3; z-index: -1; }
-    .arch .l4 { grid-column: 4 / 6; grid-row: 2; z-index: -1; }
-
-    .layer-stack { display: grid; gap: 10px; }
-    .layer {
-      display: grid;
-      grid-template-columns: 210px 1fr;
-      gap: 18px;
-      align-items: center;
-      padding: 12px 18px;
-      border-right: 4px solid var(--azure);
-      background: linear-gradient(90deg, rgba(16,43,63,.15), rgba(16,43,63,.7));
-    }
-    .layer strong { color: var(--white); font-size: 18px; }
-    .layer span { color: var(--muted); font-size: 15px; }
-
-    .table { width: 100%; border-collapse: collapse; font-size: 16px; }
-    .table th, .table td { padding: 10px 13px; border-bottom: 1px solid var(--line); text-align: right; }
-    .table th { color: var(--cyan); font-weight: 700; }
-    .table td { color: #deedf6; }
-    .table .num { text-align: left; direction: ltr; font-variant-numeric: tabular-nums; }
-    .table tr.total td { color: var(--white); font-weight: 800; border-top: 2px solid var(--azure); border-bottom: 0; }
-
-    .bars { display: grid; gap: 18px; }
-    .bar-row { display: grid; grid-template-columns: 115px 1fr 85px; gap: 14px; align-items: center; }
-    .bar-name { font-size: 16px; color: #dbeaf4; }
-    .bar-track { height: 14px; background: #0b1d2b; border-radius: 999px; overflow: hidden; }
-    .bar-fill { height: 100%; width: var(--w); background: linear-gradient(90deg, var(--azure), var(--cyan)); border-radius: inherit; }
-    .bar-price { direction: ltr; text-align: left; font-weight: 700; color: var(--white); }
-
-    .pipeline {
-      display: grid;
-      grid-template-columns: 1fr 44px 1fr 44px 1fr 44px 1fr;
-      align-items: center;
-      direction: ltr;
-    }
-    .pipeline .node { direction: rtl; min-height: 105px; }
-
-    .arch-lanes { display: grid; gap: 22px; }
-    .lane-row {
-      display: grid;
-      grid-template-columns: 110px 1fr;
-      gap: 18px;
-      align-items: center;
-    }
-    .lane-label {
-      color: var(--cyan);
-      font-size: 17px;
-      font-weight: 800;
-      direction: ltr;
-      text-align: center;
-      padding: 12px 6px;
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-    }
-    .lane-flow {
-      display: flex;
-      direction: ltr;
-      align-items: stretch;
-    }
-    .lane-flow .node { flex: 1; direction: rtl; min-height: 78px; }
-    .support-strip {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 18px;
-      margin: 8px 0 0 128px;
-      padding-top: 18px;
-      border-top: 1px solid var(--line);
-    }
-    .support-strip div { text-align: center; }
-    .support-strip strong { display: block; color: var(--azure); font-size: 17px; }
-    .support-strip span { color: var(--muted); font-size: 13px; }
-
-    .decision {
-      padding: 15px 0;
-      border-bottom: 1px solid var(--line);
-      display: grid;
-      grid-template-columns: 1fr 1.15fr;
-      gap: 22px;
-    }
-    .decision strong { font-size: 18px; }
-    .decision span { color: var(--muted); font-size: 15px; line-height: 1.4; }
-
-    .footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      color: rgba(220,239,250,.55);
-      font-size: 13px;
-      direction: ltr;
-    }
-
-    .title-slide {
-      grid-template-rows: 1fr auto;
-      padding: 72px 80px 44px;
-      background:
-        radial-gradient(circle at 82% 38%, rgba(67,184,255,.22), transparent 27%),
-        linear-gradient(135deg, #06131f, #0c2b42 67%, #0b394a);
-    }
-    .title-slide .hero { display: grid; align-content: center; max-width: 930px; }
-    .title-slide h1 { font-size: clamp(58px, 6.2vw, 98px); }
-    .title-slide .lead { max-width: 780px; margin-top: 26px; }
-    .title-line { width: 180px; height: 5px; background: linear-gradient(90deg, var(--azure), var(--cyan)); margin: 26px 0; border-radius: 999px; }
-    .orb {
-      position: absolute;
-      left: 110px;
-      top: 150px;
-      width: 290px;
-      height: 290px;
-      border: 1px solid rgba(105,226,210,.28);
-      border-radius: 50%;
-      box-shadow: inset 0 0 70px rgba(67,184,255,.09), 0 0 80px rgba(67,184,255,.08);
-    }
-    .orb::before, .orb::after { content: ""; position: absolute; border-radius: 50%; border: 1px solid rgba(67,184,255,.24); }
-    .orb::before { inset: 42px; }
-    .orb::after { inset: 96px; background: rgba(67,184,255,.09); }
-
-    .controls {
-      position: fixed;
-      right: 18px;
-      bottom: 18px;
-      display: flex;
-      gap: 8px;
-      direction: ltr;
-      z-index: 20;
-      opacity: .85;
-    }
-    .controls button {
-      width: 42px;
-      height: 42px;
-      border: 1px solid rgba(255,255,255,.18);
-      border-radius: 50%;
-      color: white;
-      background: rgba(5,18,29,.78);
-      cursor: pointer;
-      font-size: 18px;
-    }
-    .controls button:hover { background: rgba(27,82,112,.9); }
-    .counter {
-      position: fixed;
-      left: 22px;
-      bottom: 22px;
-      z-index: 20;
-      color: rgba(255,255,255,.65);
-      font-size: 13px;
-      direction: ltr;
-    }
-    .progress {
-      position: fixed;
-      right: 0;
-      bottom: 0;
-      height: 4px;
-      width: var(--progress, 6.25%);
-      background: linear-gradient(90deg, var(--azure), var(--cyan));
-      z-index: 25;
-      transition: width .2s ease;
-    }
-
-    @media (max-width: 900px) {
-      .slide { padding: 35px 42px 28px; gap: 12px; }
-      .slide::after { left: 42px; top: 18px; }
-      p, li { font-size: 15px; }
-      .node strong { font-size: 15px; }
-      .node span { font-size: 12px; }
-      .content { transform: scale(.94); transform-origin: center; }
-    }
-
-    @media print {
-      html, body { overflow: visible; height: auto; background: white; }
-      .deck { width: 13.333in; height: auto; overflow: visible; box-shadow: none; }
-      .slide { position: relative; display: grid !important; width: 13.333in; height: 7.5in; break-after: page; }
-      .controls, .counter, .progress { display: none; }
-    }
-  </style>
-</head>
-<body>
-  <main class="deck" aria-label="מצגת Azure Weather">
-
-    <section class="slide title-slide active" data-section="AZURE WEATHER">
-      <div class="orb" aria-hidden="true"></div>
-      <div class="hero">
-        <div class="kicker">מהדרישה למערכת Production</div>
-        <h1>Azure Weather</h1>
-        <div class="title-line"></div>
-        <p class="lead">ארכיטקטורת ענן מאובטחת, זמינה ומתועדת, עם תהליך CI/CD מבוקר ותשתית המנוהלת באמצעות Terraform.</p>
-      </div>
-      <div class="footer"><span>Architecture & Delivery Story</span><span>2026</span></div>
-    </section>
-
-    <section class="slide" data-section="01 / REQUIREMENTS">
-      <header>
-        <div class="kicker">נקודת הפתיחה</div>
-        <h2>מה הלקוח ביקש?</h2>
-        <p class="lead">אפליקציית מזג אוויר מלאה בענן, לא רק דמו מקומי.</p>
-      </header>
-      <div class="content three">
-        <div>
-          <h3 class="accent">חוויה למשתמש</h3>
-          <ul>
-            <li>חיפוש תחזית לעיר</li>
-            <li>מעבר בין ימי התחזית</li>
-            <li>שמירת יום נבחר בלבד</li>
-            <li>היסטוריה פרטית לכל משתמש</li>
-            <li>ערים מרכזיות לבחירה מהירה</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="mint">דרישות מערכת</h3>
-          <ul>
-            <li>Frontend, Backend ומסד נתונים</li>
-            <li>התחברות עם ספקי זהות מוכרים</li>
-            <li>סודות לא נשמרים בקוד</li>
-            <li>זמינות ויכולת גדילה</li>
-            <li>ניטור ותיעוד תפעולי</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="warm">דרך מסירה</h3>
-          <ul>
-            <li>תשתית כקוד עם Terraform</li>
-            <li>בדיקות CI אוטומטיות</li>
-            <li>CD מבוקר ל-Production</li>
-            <li>אומדן עלויות והסבר החלטות</li>
-            <li>תיעוד שימוש ב-AI וביקורת אנושית</li>
-          </ul>
-        </div>
-      </div>
-      <div class="footer"><span>Azure Weather</span><span>02</span></div>
-    </section>
-
-    <section class="slide" data-section="02 / PLANNING">
-      <header>
-        <div class="kicker">שלב התכנון</div>
-        <h2>תכנון לפי שכבות, סיכונים ופשרות</h2>
-      </header>
-      <div class="content two-wide">
-        <div class="layer-stack">
-          <div class="layer"><strong>מוצר</strong><span>מי המשתמש, מה הוא שומר, ומהו מסלול השימוש המלא</span></div>
-          <div class="layer"><strong>אפליקציה</strong><span>React סטטי, API ב-NestJS ו-PostgreSQL</span></div>
-          <div class="layer"><strong>אבטחה</strong><span>Entra External ID, Key Vault, Managed Identity ורשת פרטית</span></div>
-          <div class="layer"><strong>תפעול</strong><span>זמינות, autoscale, migrations, ניטור ו-health checks</span></div>
-          <div class="layer"><strong>Delivery</strong><span>Terraform לתשתית, CI לאיכות ו-CD ידני לגרסה</span></div>
-          <div class="layer"><strong>עלות</strong><span>איזון בין שרידות, פשטות תפעולית והוצאה חודשית</span></div>
-        </div>
-        <div>
-          <div class="statement">בכל החלטה נשאלה אותה שאלה: האם היא משרתת דרישה אמיתית, ומה המחיר התפעולי שלה?</div>
-          <div style="height:26px"></div>
-          <div class="metric"><span class="value">PaaS</span><span class="label">העדפה לשירותים מנוהלים במקום תחזוקת מכונות ו-Kubernetes</span></div>
-          <div class="metric" style="margin-top:22px"><span class="value">Single Region</span><span class="label">שרידות בין Zones, ללא העלות והמורכבות של Multi-Region</span></div>
-        </div>
-      </div>
-      <div class="footer"><span>Planning principles</span><span>03</span></div>
-    </section>
-
-    <section class="slide" data-section="03 / ARCHITECTURE">
-      <header>
-        <div class="kicker">מבט על</div>
-        <h2>הארכיטקטורה הסופית</h2>
-        <p class="lead">כניסה גלובלית אחת שמפצלת בין אתר סטטי ל-API, עם נתונים וסודות מאחורי שכבות הגנה.</p>
-      </header>
-      <div class="content">
-        <div class="arch-lanes">
-          <div class="lane-row">
-            <div class="lane-label">/*</div>
-            <div class="lane-flow">
-              <div class="node azure"><strong>Browser</strong><span>www.nivbarweather.com</span></div>
-              <div class="connector"></div>
-              <div class="node azure"><strong>Azure Front Door</strong><span>TLS וניתוב גלובלי</span></div>
-              <div class="connector"></div>
-              <div class="node"><strong>React Frontend</strong><span>Storage Static Website</span></div>
-            </div>
-          </div>
-          <div class="lane-row">
-            <div class="lane-label">/api/*</div>
-            <div class="lane-flow">
-              <div class="node azure"><strong>Browser</strong><span>Access token מאומת</span></div>
-              <div class="connector"></div>
-              <div class="node azure"><strong>Azure Front Door</strong><span>API אינו נשמר ב-cache</span></div>
-              <div class="connector"></div>
-              <div class="node"><strong>NestJS App Service</strong><span>Docker, שני workers</span></div>
-              <div class="connector"></div>
-              <div class="node mint"><strong>Private PostgreSQL</strong><span>HA בין Zones</span></div>
-            </div>
-          </div>
-          <div class="support-strip">
-            <div><strong>Entra External ID</strong><span>זהות והתחברות</span></div>
-            <div><strong>OpenWeather</strong><span>ספק תחזית חיצוני</span></div>
-            <div><strong>Key Vault</strong><span>סודות בזמן ריצה</span></div>
-            <div><strong>App Insights + Logs</strong><span>ניטור ותפעול</span></div>
-          </div>
-        </div>
-      </div>
-      <div class="footer"><span>Runtime architecture</span><span>04</span></div>
-    </section>
-
-    <section class="slide" data-section="04 / REQUEST FLOW">
-      <header>
-        <div class="kicker">זרימת בקשה</div>
-        <h2>מה קורה כשמשתמש מחפש עיר?</h2>
-      </header>
-      <div class="content">
-        <div class="flow">
-          <div class="node azure"><strong>1. Browser</strong><span>המשתמש מחובר ושולח בקשה</span></div>
-          <div class="connector"></div>
-          <div class="node azure"><strong>2. Front Door</strong><span>/api מנותב ל-App Service</span></div>
-          <div class="connector"></div>
-          <div class="node"><strong>3. Backend</strong><span>מאמת token, scope וזהות</span></div>
-          <div class="connector"></div>
-          <div class="node orange"><strong>4. OpenWeather</strong><span>Geocoding ותחזית עדכנית</span></div>
-          <div class="connector"></div>
-          <div class="node mint"><strong>5. PostgreSQL</strong><span>שמירה רק אם נבחר יום לשמירה</span></div>
-        </div>
-        <div class="rule" style="margin:34px 0 24px"></div>
-        <div class="four">
-          <div class="metric"><span class="value">60m</span><span class="label">Cache ל-geocoding</span></div>
-          <div class="metric"><span class="value">10m</span><span class="label">Cache לתחזית</span></div>
-          <div class="metric"><span class="value">0</span><span class="label">מפתחות ספק חיצוני בדפדפן</span></div>
-          <div class="metric"><span class="value">1 day</span><span class="label">Snapshot בכל רשומה שמורה</span></div>
-        </div>
-      </div>
-      <div class="footer"><span>End-to-end request</span><span>05</span></div>
-    </section>
-
-    <section class="slide" data-section="05 / APPLICATION">
-      <header>
-        <div class="kicker">האפליקציה והמידע</div>
-        <h2>חלוקת אחריות ברורה</h2>
-      </header>
-      <div class="content three">
-        <div>
-          <h3 class="accent">React + Vite</h3>
-          <ul>
-            <li>ממשק סטטי ומהיר</li>
-            <li>MSAL להתחברות</li>
-            <li>דפדוף יום-אחר-יום</li>
-            <li>אין גישה ישירה למסד או ל-OpenWeather</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="mint">NestJS API</h3>
-          <ul>
-            <li>אימות מלא של access token</li>
-            <li>חיפוש ו-normalization</li>
-            <li>שמירה ושליפה לפי owner</li>
-            <li>Cache בזיכרון להפחתת קריאות</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="warm">PostgreSQL</h3>
-          <ul>
-            <li>תחזית נשמרת כ-snapshot קבוע</li>
-            <li>רשומות מופרדות לפי זהות מאומתת</li>
-            <li>אין שמירת סיסמה, token או email</li>
-            <li>Migration נפרד לפני גרסה חדשה</li>
-          </ul>
-        </div>
-      </div>
-      <div class="footer"><span>Application boundaries</span><span>06</span></div>
-    </section>
-
-    <section class="slide" data-section="06 / SECURITY">
-      <header>
-        <div class="kicker">Defense in depth</div>
-        <h2>אבטחה בכמה שכבות</h2>
-      </header>
-      <div class="content two">
-        <div class="step-list">
-          <div class="step"><strong>Microsoft Entra External ID</strong><span>Google ו-Microsoft Account, Authorization Code + PKCE</span></div>
-          <div class="step"><strong>אימות ב-Backend</strong><span>חתימה, issuer, audience, tenant, client, expiry ו-scope</span></div>
-          <div class="step"><strong>Front Door בלבד</strong><span>App Service חוסם ברירת מחדל ומאפשר AzureFrontDoor.Backend עם X-Azure-FDID תואם</span></div>
-          <div class="step"><strong>רשת פרטית למסד</strong><span>VNet integration, delegated subnet ו-Private DNS</span></div>
-        </div>
-        <div class="step-list">
-          <div class="step"><strong>Key Vault</strong><span>סודות נצרכים בזמן ריצה, לא נשמרים ב-Git</span></div>
-          <div class="step"><strong>Managed Identity</strong><span>גישה ל-Key Vault ול-ACR ללא credential קבוע באפליקציה</span></div>
-          <div class="step"><strong>GitHub OIDC</strong><span>CD נכנס ל-Azure ללא client secret ארוך-חיים</span></div>
-          <div class="step"><strong>RBAC מצומצם</strong><span>הרשאות deployment מפוצלות לפי יעד ופעולה</span></div>
-        </div>
-      </div>
-      <div class="footer"><span>Security architecture</span><span>07</span></div>
-    </section>
-
-    <section class="slide" data-section="07 / RESILIENCE">
-      <header>
-        <div class="kicker">זמינות וגדילה</div>
-        <h2>אין מכונות שמנוהלות ידנית</h2>
-        <p class="lead">השירותים מנוהלים על ידי Azure. אנחנו מגדירים capacity, scaling וגבולות כשל.</p>
-      </header>
-      <div class="content two-wide">
-        <div class="four" style="grid-template-columns:repeat(2,1fr); gap:28px">
-          <div class="metric"><span class="value">2–4</span><span class="label">App Service workers. מינימום 2, autoscale עד 4</span></div>
-          <div class="metric"><span class="value">2 AZ</span><span class="label">PostgreSQL primary + standby ב-Zones שונים</span></div>
-          <div class="metric"><span class="value">7 days</span><span class="label">תקופת גיבוי למסד הנתונים</span></div>
-          <div class="metric"><span class="value">1 Region</span><span class="label">Sweden Central. אין DR אזורי מלא</span></div>
-        </div>
-        <div>
-          <div class="statement">Front Door ו-App Service מספקים ניתוב ואיזון עומסים. אין ALB או Load Balancer שמנוהל בנפרד.</div>
-          <ul style="margin-top:24px">
-            <li>Scale-out מעל 70% CPU במשך 5 דקות</li>
-            <li>Scale-in מתחת 30% CPU במשך 10 דקות</li>
-            <li>PostgreSQL מבצע failover לשכפול standby</li>
-            <li>Storage הוא LRS ולכן אינו פתרון Multi-Region</li>
-          </ul>
-        </div>
-      </div>
-      <div class="footer"><span>Availability model</span><span>08</span></div>
-    </section>
-
-    <section class="slide" data-section="08 / INFRASTRUCTURE AS CODE">
-      <header>
-        <div class="kicker">Terraform</div>
-        <h2>מי מנהל מה?</h2>
-      </header>
-      <div class="content two">
-        <div>
-          <h3 class="accent">Terraform מנהל</h3>
-          <ul>
-            <li>Azure resources ורשתות</li>
-            <li>Managed identities ו-RBAC</li>
-            <li>Diagnostic settings ו-autoscale</li>
-            <li>Front Door routes ו-custom domain association</li>
-            <li>Container Apps migration job</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="warm">בעלות חיצונית או ידנית</h3>
-          <ul>
-            <li>Secrets והערכים שלהם</li>
-            <li>Namecheap DNS</li>
-            <li>Entra tenant, app registrations ו-redirect URI</li>
-            <li>GitHub Environment והפעלת Production CD</li>
-            <li>Build artifacts ו-container image של כל release</li>
-          </ul>
-        </div>
-      </div>
-      <div class="statement" style="align-self:end">הפרדה מכוונת: Terraform שולט בתשתית, וה-CD שולט בגרסת האפליקציה. Lifecycle ignores מצומצמים מונעים משני הכלים להילחם זה בזה.</div>
-      <div class="footer"><span>Ownership boundaries</span><span>09</span></div>
-    </section>
-
-    <section class="slide" data-section="09 / CI">
-      <header>
-        <div class="kicker">Continuous Integration</div>
-        <h2>כל שינוי מוכיח שהוא ראוי למיזוג</h2>
-        <p class="lead">רץ ב-Pull Request, ב-push ל-main וגם ידנית. אינו מקבל הרשאות Azure ואינו פורס.</p>
-      </header>
-      <div class="content">
-        <div class="pipeline">
-          <div class="node azure"><strong>Application checks</strong><span>npm ci, format, lint, tests, build, audit</span></div>
-          <div class="connector"></div>
-          <div class="node"><strong>Backend image</strong><span>Docker build מוכיח שה-image נבנה</span></div>
-          <div class="connector"></div>
-          <div class="node mint"><strong>Terraform checks</strong><span>fmt, init ללא backend, validate</span></div>
-          <div class="connector"></div>
-          <div class="node azure"><strong>Merge signal</strong><span>שלושה jobs בלתי תלויים וברורים</span></div>
-        </div>
-        <div class="rule" style="margin:38px 0 22px"></div>
-        <div class="statement">עקרון מרכזי: CI בודק קוד ותשתית, אבל לא משנה Production.</div>
-      </div>
-      <div class="footer"><span>GitHub Actions CI</span><span>10</span></div>
-    </section>
-
-    <section class="slide" data-section="10 / CD">
-      <header>
-        <div class="kicker">Continuous Delivery</div>
-        <h2>Release ידני, עקבי ומאומת</h2>
-        <p class="lead">Production משתנה רק לאחר הפעלה מכוונת של workflow מהענף main.</p>
-      </header>
-      <div class="content">
-        <div class="flow">
-          <div class="node azure"><strong>Authorize</strong><span>main, actor מדויק, GitHub Environment</span></div>
-          <div class="connector"></div>
-          <div class="node"><strong>OIDC Login</strong><span>Federated identity ללא secret קבוע</span></div>
-          <div class="connector"></div>
-          <div class="node"><strong>Build & Push</strong><span>Image לפי SHA, אימות digest ב-ACR</span></div>
-          <div class="connector"></div>
-          <div class="node orange"><strong>Migration Gate</strong><span>job חד-פעמי חייב להצליח</span></div>
-          <div class="connector"></div>
-          <div class="node mint"><strong>Deploy & Verify</strong><span>Backend, frontend, purge, smoke tests</span></div>
-        </div>
-        <div class="three" style="margin-top:34px">
-          <div class="metric"><span class="value">Digest</span><span class="label">גרסה immutable ולא tag משתנה</span></div>
-          <div class="metric"><span class="value">1</span><span class="label">release פעיל בכל רגע באמצעות concurrency</span></div>
-          <div class="metric"><span class="value">Rollback</span><span class="label">Best-effort ל-backend אם health check נכשל</span></div>
-        </div>
-      </div>
-      <div class="footer"><span>GitHub Actions CD</span><span>11</span></div>
-    </section>
-
-    <section class="slide" data-section="11 / OBSERVABILITY">
-      <header>
-        <div class="kicker">ניטור ותפעול</div>
-        <h2>מה אנחנו רואים כשהמערכת רצה?</h2>
-      </header>
-      <div class="content two-wide">
-        <div class="layer-stack">
-          <div class="layer"><strong>App Service</strong><span>HTTP logs, platform logs, metrics ו-health status</span></div>
-          <div class="layer"><strong>PostgreSQL</strong><span>database metrics ו-diagnostic logs</span></div>
-          <div class="layer"><strong>Front Door</strong><span>access logs, health probes ו-routing metrics</span></div>
-          <div class="layer"><strong>Key Vault</strong><span>Audit events לכל גישה לסודות</span></div>
-          <div class="layer"><strong>Migration Job</strong><span>הרצות, exit status ולוגים ב-Container Apps</span></div>
-        </div>
-        <div>
-          <div class="metric"><span class="value">30 days</span><span class="label">Retention ב-Log Analytics</span></div>
-          <div class="metric" style="margin-top:25px"><span class="value">App Insights</span><span class="label">Workspace-based resource וחיבור לאפליקציה</span></div>
-          <div class="statement" style="margin-top:30px">הגבול הנוכחי: אין עדיין alert destination מלא ואין instrumentation עשיר מותאם-אפליקציה.</div>
-        </div>
-      </div>
-      <div class="footer"><span>Monitoring baseline</span><span>12</span></div>
-    </section>
-
-    <section class="slide" data-section="12 / COST">
-      <header>
-        <div class="kicker">אומדן Pay-As-You-Go</div>
-        <h2>עלות צפויה: <span class="warm"><bdi dir="ltr">$445–460</bdi> לחודש</span></h2>
-        <p class="lead">אומדן ציבורי ל-Sweden Central לפני מס, הנחות או credits.</p>
-      </header>
-      <div class="content two-wide">
-        <table class="table" aria-label="פירוט עלויות חודשי">
-          <thead><tr><th>רכיב</th><th class="num">עלות חודשית</th></tr></thead>
-          <tbody>
-            <tr><td>App Service, שני P0v3</td><td class="num">$129.94</td></tr>
-            <tr><td>PostgreSQL compute, primary + standby</td><td class="num">$262.10</td></tr>
-            <tr><td>PostgreSQL storage</td><td class="num">$8.76</td></tr>
-            <tr><td>Front Door Standard base</td><td class="num">$35.00</td></tr>
-            <tr><td>ACR Basic</td><td class="num">$5.06</td></tr>
-            <tr><td>Logs, traffic ושירותים משתנים</td><td class="num">$2–18</td></tr>
-            <tr class="total"><td>סה״כ צפוי</td><td class="num">$445–460</td></tr>
-          </tbody>
-        </table>
-        <div>
-          <h3 style="margin-bottom:20px">השוואת ליבת העלות לפי Region</h3>
-          <div class="bars">
-            <div class="bar-row"><span class="bar-name">Sweden Central</span><div class="bar-track"><div class="bar-fill" style="--w:92.8%"></div></div><span class="bar-price">$440.87</span></div>
-            <div class="bar-row"><span class="bar-name">North Europe</span><div class="bar-track"><div class="bar-fill" style="--w:94%"></div></div><span class="bar-price">$446.74</span></div>
-            <div class="bar-row"><span class="bar-name">West Europe</span><div class="bar-track"><div class="bar-fill" style="--w:100%"></div></div><span class="bar-price">$475.15</span></div>
-          </div>
-          <div class="statement" style="margin-top:42px">רוב העלות קונה שרידות: שני workers ו-PostgreSQL עם standby בין Zones.</div>
-          <p class="small" style="margin-top:18px">ללא HA במסד: חיסכון של כ-$135 לחודש. Worker יחיד: חיסכון של כ-$65, במחיר פגיעה בשרידות.</p>
-        </div>
-      </div>
-      <div class="footer"><span>Monthly cost model</span><span>13</span></div>
-    </section>
-
-    <section class="slide" data-section="13 / TRADE-OFFS">
-      <header>
-        <div class="kicker">החלטות ארכיטקטוניות</div>
-        <h2>מה בחרנו, ולמה?</h2>
-      </header>
-      <div class="content two">
-        <div>
-          <div class="decision"><strong>PaaS במקום VMs או AKS</strong><span>פחות תחזוקה, patching ותפעול עבור צוות קטן</span></div>
-          <div class="decision"><strong>Front Door Standard</strong><span>Routing, TLS ודומיין מותאם בעלות נמוכה מ-Premium + Private Link + WAF</span></div>
-          <div class="decision"><strong>PostgreSQL HA ב-Zones</strong><span>שרידות לתקלת Zone ללא מורכבות Multi-Region</span></div>
-          <div class="decision"><strong>ACR Basic</strong><span>מספיק לנפח הפרויקט, Premium נשמר כאופציית Private Endpoint</span></div>
-        </div>
-        <div>
-          <div class="decision"><strong>CD ידני</strong><span>בקרה אנושית על Production במקום פריסה אוטומטית מכל push</span></div>
-          <div class="decision"><strong>Migration job נפרד</strong><span>מונע race בין 2–4 מופעי האפליקציה</span></div>
-          <div class="decision"><strong>Cache בזיכרון</strong><span>פשוט וזול, אך אינו משותף בין workers כמו Redis</span></div>
-          <div class="decision"><strong>Single Region</strong><span>פשרה מודעת: זמינות אזורית טובה, ללא התאוששות מאסון אזורי מלא</span></div>
-        </div>
-      </div>
-      <div class="footer"><span>Architecture rationale</span><span>14</span></div>
-    </section>
-
-    <section class="slide" data-section="14 / AI WORKFLOW">
-      <header>
-        <div class="kicker">Human-in-the-loop</div>
-        <h2>שיטת העבודה עם AI</h2>
-        <p class="lead">AI שימש כשותף הנדסי מתועד. האדם נשאר בעל הסמכות על סודות, תשתית חיה ו-Production.</p>
-      </header>
-      <div class="content two-wide">
-        <div class="step-list">
-          <div class="step"><strong>הגדרת משימה וגבולות</strong><span>מטרה, קבצים מותרים, פעולות אסורות וסודיות</span></div>
-          <div class="step"><strong>שינוי קטן וממוקד</strong><span>Interaction ממוספר לכל החלטה או תיקון</span></div>
-          <div class="step"><strong>Validation אוטומטי</strong><span>format, lint, tests, build, Terraform validate ו-diff checks</span></div>
-          <div class="step"><strong>Human review</strong><span>בדיקת התוצאה, plan, rollout והתנהגות Production</span></div>
-          <div class="step"><strong>תיעוד והפקת לקחים</strong><span>prompt, response, שינויים, אבטחה, הנחות וסטטוס סופי</span></div>
-        </div>
-        <div>
-          <h3 class="accent">דוגמאות לתיקונים שה-AI עזר לזהות</h3>
-          <ul>
-            <li>OIDC subject עבר לזהויות GitHub immutable</li>
-            <li>שם migration job קוצר למגבלת Azure</li>
-            <li>validation לסיסמת PostgreSQL תואם למציאות</li>
-            <li>tag drift של Azure טופל ב-lifecycle ממוקד</li>
-            <li>הדומיין החדש נפרס בשני שלבים מבוקרים</li>
-          </ul>
-          <div class="statement" style="margin-top:32px">העיקרון: AI מציע ומבצע עבודה תחומה. CI, Terraform plan והאדם מוכיחים שהתוצאה נכונה.</div>
-        </div>
-      </div>
-      <div class="footer"><span>AI-assisted engineering</span><span>15</span></div>
-    </section>
-
-    <section class="slide title-slide" data-section="15 / RESULT">
-      <div class="hero">
-        <div class="kicker">התוצאה</div>
-        <h1>מערכת חיה, לא רק תרשים</h1>
-        <div class="title-line"></div>
-        <p class="lead">דומיין מותאם, התחברות, תחזית, שמירה מבודדת למשתמש, תשתית כקוד ותהליך CI/CD שהוכח ב-Production.</p>
-        <div class="three" style="margin-top:42px; max-width:920px">
-          <div class="metric"><span class="value">www</span><span class="label">nivbarweather.com</span></div>
-          <div class="metric"><span class="value">IaC</span><span class="label">Terraform + remote state</span></div>
-          <div class="metric"><span class="value">CI/CD</span><span class="label">GitHub Actions + OIDC</span></div>
-        </div>
-      </div>
-      <div class="footer"><span>Azure Weather</span><span>16</span></div>
-    </section>
-  </main>
-
-  <div class="counter" id="counter" aria-live="polite">01 / 16</div>
-  <div class="controls" aria-label="ניווט במצגת">
-    <button id="prev" aria-label="שקף קודם">‹</button>
-    <button id="next" aria-label="שקף הבא">›</button>
-  </div>
-  <div class="progress" id="progress"></div>
-
-  <script>
-    (() => {
-      const slides = [...document.querySelectorAll('.slide')];
-      const counter = document.getElementById('counter');
-      const progress = document.getElementById('progress');
-      let index = Math.max(0, Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0));
-
-      function show(nextIndex) {
-        index = (nextIndex + slides.length) % slides.length;
-        slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
-        counter.textContent = `${String(index + 1).padStart(2, '0')} / ${String(slides.length).padStart(2, '0')}`;
-        progress.style.setProperty('--progress', `${((index + 1) / slides.length) * 100}%`);
-        history.replaceState(null, '', `#${index + 1}`);
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Azure Weather | מהדרישה ל-Production</title>
+    <style>
+      :root {
+        --navy: #071725;
+        --navy-2: #0b2336;
+        --panel: #102b3f;
+        --line: #2f5870;
+        --azure: #43b8ff;
+        --cyan: #69e2d2;
+        --white: #f6fbff;
+        --muted: #a9bfd0;
+        --orange: #ffb35c;
+        --green: #76e3a3;
+        --red: #ff7b7b;
+        --shadow: 0 28px 75px rgba(0, 0, 0, 0.35);
       }
 
-      document.getElementById('next').addEventListener('click', () => show(index + 1));
-      document.getElementById('prev').addEventListener('click', () => show(index - 1));
-      window.addEventListener('keydown', event => {
-        if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(event.key)) { event.preventDefault(); show(index + 1); }
-        if (['ArrowLeft', 'PageUp', 'Backspace'].includes(event.key)) { event.preventDefault(); show(index - 1); }
-        if (event.key === 'Home') show(0);
-        if (event.key === 'End') show(slides.length - 1);
-      });
-      window.addEventListener('hashchange', () => {
-        const requested = Number(location.hash.slice(1));
-        if (Number.isInteger(requested) && requested >= 1 && requested <= slides.length) show(requested - 1);
-      });
-      show(index);
-    })();
-  </script>
-</body>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #020b12;
+        color: var(--white);
+        font-family: "Segoe UI", Arial, sans-serif;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(
+            circle at 10% 10%,
+            rgba(67, 184, 255, 0.14),
+            transparent 30%
+          ),
+          radial-gradient(
+            circle at 88% 90%,
+            rgba(105, 226, 210, 0.1),
+            transparent 28%
+          ),
+          #020b12;
+      }
+
+      .deck {
+        position: relative;
+        width: min(100vw, calc(100vh * 16 / 9));
+        height: min(100vh, calc(100vw * 9 / 16));
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        background: var(--navy);
+        box-shadow: var(--shadow);
+        isolation: isolate;
+      }
+
+      .deck::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.025) 1px,
+            transparent 1px
+          );
+        background-size: 44px 44px;
+        mask-image: linear-gradient(to bottom, black, transparent 86%);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .slide {
+        position: absolute;
+        inset: 0;
+        display: none;
+        grid-template-rows: auto 1fr auto;
+        gap: 20px;
+        padding: 56px 70px 38px;
+        background:
+          radial-gradient(
+            circle at 94% 2%,
+            rgba(67, 184, 255, 0.14),
+            transparent 28%
+          ),
+          linear-gradient(145deg, rgba(7, 23, 37, 0.99), rgba(8, 29, 45, 0.98));
+        z-index: 1;
+      }
+
+      .slide.active {
+        display: grid;
+      }
+
+      .slide::after {
+        content: attr(data-section);
+        position: absolute;
+        left: 70px;
+        top: 32px;
+        color: rgba(255, 255, 255, 0.16);
+        font-size: 14px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      header {
+        max-width: 1030px;
+      }
+      .kicker {
+        color: var(--cyan);
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(44px, 5.1vw, 78px);
+        line-height: 1.05;
+        letter-spacing: -0.03em;
+      }
+      h2 {
+        font-size: clamp(32px, 3.15vw, 52px);
+        line-height: 1.08;
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        font-size: 22px;
+        line-height: 1.25;
+      }
+      p,
+      li {
+        font-size: clamp(17px, 1.35vw, 22px);
+        line-height: 1.52;
+      }
+      .lead {
+        margin-top: 14px;
+        max-width: 940px;
+        color: var(--muted);
+        font-size: clamp(19px, 1.65vw, 26px);
+      }
+      .small {
+        font-size: 15px;
+        color: var(--muted);
+      }
+      .accent {
+        color: var(--azure);
+      }
+      .mint {
+        color: var(--cyan);
+      }
+      .warm {
+        color: var(--orange);
+      }
+
+      .content {
+        min-height: 0;
+        display: grid;
+        align-items: center;
+      }
+      .two {
+        grid-template-columns: 1fr 1fr;
+        gap: 52px;
+      }
+      .two-wide {
+        grid-template-columns: 1.25fr 0.75fr;
+        gap: 48px;
+      }
+      .three {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 34px;
+      }
+      .four {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 24px;
+      }
+
+      .rule {
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--line),
+          transparent
+        );
+      }
+      .v-rule {
+        width: 1px;
+        height: 76%;
+        align-self: center;
+        background: linear-gradient(transparent, var(--line), transparent);
+      }
+
+      ul {
+        margin: 14px 0 0;
+        padding: 0 25px 0 0;
+      }
+      li {
+        margin: 8px 0;
+        color: #dfeef8;
+      }
+      li::marker {
+        color: var(--azure);
+      }
+
+      .statement {
+        border-right: 5px solid var(--azure);
+        padding: 12px 22px 12px 0;
+        font-size: clamp(23px, 2vw, 32px);
+        line-height: 1.4;
+        font-weight: 650;
+      }
+
+      .metric {
+        padding-top: 18px;
+        border-top: 2px solid var(--line);
+      }
+      .metric .value {
+        display: block;
+        font-size: clamp(34px, 3vw, 54px);
+        font-weight: 800;
+        color: var(--azure);
+      }
+      .metric .label {
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.4;
+      }
+
+      .node {
+        position: relative;
+        min-height: 86px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 6px;
+        padding: 15px 18px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(14, 45, 65, 0.72);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+      }
+      .node strong {
+        font-size: 19px;
+      }
+      .node span {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.35;
+      }
+      .node.azure {
+        border-color: rgba(67, 184, 255, 0.75);
+        background: linear-gradient(
+          145deg,
+          rgba(22, 78, 111, 0.85),
+          rgba(12, 44, 65, 0.9)
+        );
+      }
+      .node.mint {
+        border-color: rgba(105, 226, 210, 0.6);
+      }
+      .node.orange {
+        border-color: rgba(255, 179, 92, 0.68);
+      }
+
+      .flow {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        direction: ltr;
+      }
+      .flow .node {
+        flex: 1;
+        direction: rtl;
+      }
+      .connector {
+        position: relative;
+        flex: 0 0 44px;
+        align-self: center;
+        height: 2px;
+        background: var(--azure);
+        opacity: 0.85;
+      }
+      .connector::after {
+        content: "";
+        position: absolute;
+        right: -1px;
+        top: -5px;
+        width: 0;
+        height: 0;
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-left: 9px solid var(--azure);
+      }
+
+      .step-list {
+        display: grid;
+        gap: 14px;
+        counter-reset: steps;
+      }
+      .step {
+        position: relative;
+        padding: 10px 62px 10px 10px;
+        min-height: 54px;
+        border-bottom: 1px solid rgba(47, 88, 112, 0.75);
+      }
+      .step::before {
+        counter-increment: steps;
+        content: counter(steps, decimal-leading-zero);
+        position: absolute;
+        right: 0;
+        top: 6px;
+        color: var(--azure);
+        font-size: 24px;
+        font-weight: 800;
+      }
+      .step strong {
+        display: block;
+        font-size: 19px;
+        margin-bottom: 4px;
+      }
+      .step span {
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.35;
+      }
+
+      .arch {
+        display: grid;
+        grid-template-columns: 1fr 1.05fr 1.15fr 1.15fr 1fr;
+        grid-template-rows: 92px 72px 92px;
+        gap: 16px 22px;
+        direction: ltr;
+        align-items: stretch;
+      }
+      .arch .node {
+        direction: rtl;
+        text-align: right;
+      }
+      .arch .user {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .arch .front {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      .arch .storage {
+        grid-column: 3;
+        grid-row: 1;
+      }
+      .arch .app {
+        grid-column: 3;
+        grid-row: 3;
+      }
+      .arch .data {
+        grid-column: 4;
+        grid-row: 3;
+      }
+      .arch .weather {
+        grid-column: 4;
+        grid-row: 1;
+      }
+      .arch .ops {
+        grid-column: 5;
+        grid-row: 2;
+      }
+      .arch-line {
+        position: relative;
+        align-self: center;
+        height: 2px;
+        background: linear-gradient(90deg, var(--azure), var(--cyan));
+        opacity: 0.8;
+      }
+      .arch-line::after {
+        content: "";
+        position: absolute;
+        right: -1px;
+        top: -4px;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 8px solid var(--cyan);
+      }
+      .arch .l1 {
+        grid-column: 1 / 3;
+        grid-row: 2;
+        z-index: -1;
+      }
+      .arch .l2a {
+        grid-column: 2 / 4;
+        grid-row: 1;
+        transform: rotate(-18deg);
+        transform-origin: left center;
+        z-index: -1;
+      }
+      .arch .l2b {
+        grid-column: 2 / 4;
+        grid-row: 3;
+        transform: rotate(18deg);
+        transform-origin: left center;
+        z-index: -1;
+      }
+      .arch .l3a {
+        grid-column: 3 / 5;
+        grid-row: 1;
+        z-index: -1;
+      }
+      .arch .l3b {
+        grid-column: 3 / 5;
+        grid-row: 3;
+        z-index: -1;
+      }
+      .arch .l4 {
+        grid-column: 4 / 6;
+        grid-row: 2;
+        z-index: -1;
+      }
+
+      .layer-stack {
+        display: grid;
+        gap: 10px;
+      }
+      .layer {
+        display: grid;
+        grid-template-columns: 210px 1fr;
+        gap: 18px;
+        align-items: center;
+        padding: 12px 18px;
+        border-right: 4px solid var(--azure);
+        background: linear-gradient(
+          90deg,
+          rgba(16, 43, 63, 0.15),
+          rgba(16, 43, 63, 0.7)
+        );
+      }
+      .layer strong {
+        color: var(--white);
+        font-size: 18px;
+      }
+      .layer span {
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 16px;
+      }
+      .table th,
+      .table td {
+        padding: 10px 13px;
+        border-bottom: 1px solid var(--line);
+        text-align: right;
+      }
+      .table th {
+        color: var(--cyan);
+        font-weight: 700;
+      }
+      .table td {
+        color: #deedf6;
+      }
+      .table .num {
+        text-align: left;
+        direction: ltr;
+        font-variant-numeric: tabular-nums;
+      }
+      .table tr.total td {
+        color: var(--white);
+        font-weight: 800;
+        border-top: 2px solid var(--azure);
+        border-bottom: 0;
+      }
+
+      .bars {
+        display: grid;
+        gap: 18px;
+      }
+      .bar-row {
+        display: grid;
+        grid-template-columns: 115px 1fr 85px;
+        gap: 14px;
+        align-items: center;
+      }
+      .bar-name {
+        font-size: 16px;
+        color: #dbeaf4;
+      }
+      .bar-track {
+        height: 14px;
+        background: #0b1d2b;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .bar-fill {
+        height: 100%;
+        width: var(--w);
+        background: linear-gradient(90deg, var(--azure), var(--cyan));
+        border-radius: inherit;
+      }
+      .bar-price {
+        direction: ltr;
+        text-align: left;
+        font-weight: 700;
+        color: var(--white);
+      }
+
+      .pipeline {
+        display: grid;
+        grid-template-columns: 1fr 44px 1fr 44px 1fr 44px 1fr;
+        align-items: center;
+        direction: ltr;
+      }
+      .pipeline .node {
+        direction: rtl;
+        min-height: 105px;
+      }
+
+      .arch-lanes {
+        display: grid;
+        gap: 22px;
+      }
+      .lane-row {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 18px;
+        align-items: center;
+      }
+      .lane-label {
+        color: var(--cyan);
+        font-size: 17px;
+        font-weight: 800;
+        direction: ltr;
+        text-align: center;
+        padding: 12px 6px;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+      .lane-flow {
+        display: flex;
+        direction: ltr;
+        align-items: stretch;
+      }
+      .lane-flow .node {
+        flex: 1;
+        direction: rtl;
+        min-height: 78px;
+      }
+      .support-strip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+        margin: 8px 0 0 128px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+      }
+      .support-strip div {
+        text-align: center;
+      }
+      .support-strip strong {
+        display: block;
+        color: var(--azure);
+        font-size: 17px;
+      }
+      .support-strip span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .decision {
+        padding: 15px 0;
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: 1fr 1.15fr;
+        gap: 22px;
+      }
+      .decision strong {
+        font-size: 18px;
+      }
+      .decision span {
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.4;
+      }
+
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: rgba(220, 239, 250, 0.55);
+        font-size: 13px;
+        direction: ltr;
+      }
+
+      .title-slide {
+        grid-template-rows: 1fr auto;
+        padding: 72px 80px 44px;
+        background:
+          radial-gradient(
+            circle at 82% 38%,
+            rgba(67, 184, 255, 0.22),
+            transparent 27%
+          ),
+          linear-gradient(135deg, #06131f, #0c2b42 67%, #0b394a);
+      }
+      .title-slide .hero {
+        display: grid;
+        align-content: center;
+        max-width: 930px;
+      }
+      .title-slide h1 {
+        font-size: clamp(58px, 6.2vw, 98px);
+      }
+      .title-slide .lead {
+        max-width: 780px;
+        margin-top: 26px;
+      }
+      .title-line {
+        width: 180px;
+        height: 5px;
+        background: linear-gradient(90deg, var(--azure), var(--cyan));
+        margin: 26px 0;
+        border-radius: 999px;
+      }
+      .orb {
+        position: absolute;
+        left: 110px;
+        top: 150px;
+        width: 290px;
+        height: 290px;
+        border: 1px solid rgba(105, 226, 210, 0.28);
+        border-radius: 50%;
+        box-shadow:
+          inset 0 0 70px rgba(67, 184, 255, 0.09),
+          0 0 80px rgba(67, 184, 255, 0.08);
+      }
+      .orb::before,
+      .orb::after {
+        content: "";
+        position: absolute;
+        border-radius: 50%;
+        border: 1px solid rgba(67, 184, 255, 0.24);
+      }
+      .orb::before {
+        inset: 42px;
+      }
+      .orb::after {
+        inset: 96px;
+        background: rgba(67, 184, 255, 0.09);
+      }
+
+      .controls {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        display: flex;
+        gap: 8px;
+        direction: ltr;
+        z-index: 20;
+        opacity: 0.85;
+      }
+      .controls button {
+        width: 42px;
+        height: 42px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 50%;
+        color: white;
+        background: rgba(5, 18, 29, 0.78);
+        cursor: pointer;
+        font-size: 18px;
+      }
+      .controls button:hover {
+        background: rgba(27, 82, 112, 0.9);
+      }
+      .counter {
+        position: fixed;
+        left: 22px;
+        bottom: 22px;
+        z-index: 20;
+        color: rgba(255, 255, 255, 0.65);
+        font-size: 13px;
+        direction: ltr;
+      }
+      .progress {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        height: 4px;
+        width: var(--progress, 6.25%);
+        background: linear-gradient(90deg, var(--azure), var(--cyan));
+        z-index: 25;
+        transition: width 0.2s ease;
+      }
+
+      @media (max-width: 900px) {
+        .slide {
+          padding: 35px 42px 28px;
+          gap: 12px;
+        }
+        .slide::after {
+          left: 42px;
+          top: 18px;
+        }
+        p,
+        li {
+          font-size: 15px;
+        }
+        .node strong {
+          font-size: 15px;
+        }
+        .node span {
+          font-size: 12px;
+        }
+        .content {
+          transform: scale(0.94);
+          transform-origin: center;
+        }
+      }
+
+      @media print {
+        html,
+        body {
+          overflow: visible;
+          height: auto;
+          background: white;
+        }
+        .deck {
+          width: 13.333in;
+          height: auto;
+          overflow: visible;
+          box-shadow: none;
+        }
+        .slide {
+          position: relative;
+          display: grid !important;
+          width: 13.333in;
+          height: 7.5in;
+          break-after: page;
+        }
+        .controls,
+        .counter,
+        .progress {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="deck" aria-label="מצגת Azure Weather">
+      <section class="slide title-slide active" data-section="AZURE WEATHER">
+        <div class="orb" aria-hidden="true"></div>
+        <div class="hero">
+          <div class="kicker">מהדרישה למערכת Production</div>
+          <h1>Azure Weather</h1>
+          <div class="title-line"></div>
+          <p class="lead">
+            ארכיטקטורת ענן מאובטחת, זמינה ומתועדת, עם תהליך CI/CD מבוקר ותשתית
+            המנוהלת באמצעות Terraform.
+          </p>
+        </div>
+        <div class="footer">
+          <span>Architecture & Delivery Story</span><span>2026</span>
+        </div>
+      </section>
+
+      <section class="slide" data-section="01 / REQUIREMENTS">
+        <header>
+          <div class="kicker">נקודת הפתיחה</div>
+          <h2>מה הלקוח ביקש?</h2>
+          <p class="lead">אפליקציית מזג אוויר מלאה בענן, לא רק דמו מקומי.</p>
+        </header>
+        <div class="content three">
+          <div>
+            <h3 class="accent">חוויה למשתמש</h3>
+            <ul>
+              <li>חיפוש תחזית לעיר</li>
+              <li>מעבר בין ימי התחזית</li>
+              <li>שמירת יום נבחר בלבד</li>
+              <li>היסטוריה פרטית לכל משתמש</li>
+              <li>ערים מרכזיות לבחירה מהירה</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="mint">דרישות מערכת</h3>
+            <ul>
+              <li>Frontend, Backend ומסד נתונים</li>
+              <li>התחברות עם ספקי זהות מוכרים</li>
+              <li>סודות לא נשמרים בקוד</li>
+              <li>זמינות ויכולת גדילה</li>
+              <li>ניטור ותיעוד תפעולי</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="warm">דרך מסירה</h3>
+            <ul>
+              <li>תשתית כקוד עם Terraform</li>
+              <li>בדיקות CI אוטומטיות</li>
+              <li>CD מבוקר ל-Production</li>
+              <li>אומדן עלויות והסבר החלטות</li>
+              <li>תיעוד שימוש ב-AI וביקורת אנושית</li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer"><span>Azure Weather</span><span>02</span></div>
+      </section>
+
+      <section class="slide" data-section="02 / PLANNING">
+        <header>
+          <div class="kicker">שלב התכנון</div>
+          <h2>תכנון לפי שכבות, סיכונים ופשרות</h2>
+        </header>
+        <div class="content two-wide">
+          <div class="layer-stack">
+            <div class="layer">
+              <strong>מוצר</strong
+              ><span>מי המשתמש, מה הוא שומר, ומהו מסלול השימוש המלא</span>
+            </div>
+            <div class="layer">
+              <strong>אפליקציה</strong
+              ><span>React סטטי, API ב-NestJS ו-PostgreSQL</span>
+            </div>
+            <div class="layer">
+              <strong>אבטחה</strong
+              ><span
+                >Entra External ID, Key Vault, Managed Identity ורשת פרטית</span
+              >
+            </div>
+            <div class="layer">
+              <strong>תפעול</strong
+              ><span>זמינות, autoscale, migrations, ניטור ו-health checks</span>
+            </div>
+            <div class="layer">
+              <strong>Delivery</strong
+              ><span>Terraform לתשתית, CI לאיכות ו-CD ידני לגרסה</span>
+            </div>
+            <div class="layer">
+              <strong>עלות</strong
+              ><span>איזון בין שרידות, פשטות תפעולית והוצאה חודשית</span>
+            </div>
+          </div>
+          <div>
+            <div class="statement">
+              בכל החלטה נשאלה אותה שאלה: האם היא משרתת דרישה אמיתית, ומה המחיר
+              התפעולי שלה?
+            </div>
+            <div style="height: 26px"></div>
+            <div class="metric">
+              <span class="value">PaaS</span
+              ><span class="label"
+                >העדפה לשירותים מנוהלים במקום תחזוקת מכונות ו-Kubernetes</span
+              >
+            </div>
+            <div class="metric" style="margin-top: 22px">
+              <span class="value">Single Region</span
+              ><span class="label"
+                >שרידות בין Zones, ללא העלות והמורכבות של Multi-Region</span
+              >
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>Planning principles</span><span>03</span>
+        </div>
+      </section>
+
+      <section class="slide" data-section="03 / ARCHITECTURE">
+        <header>
+          <div class="kicker">מבט על</div>
+          <h2>הארכיטקטורה הסופית</h2>
+          <p class="lead">
+            כניסה גלובלית אחת שמפצלת בין אתר סטטי ל-API, עם נתונים וסודות מאחורי
+            שכבות הגנה.
+          </p>
+        </header>
+        <div class="content">
+          <div class="arch-lanes">
+            <div class="lane-row">
+              <div class="lane-label">/*</div>
+              <div class="lane-flow">
+                <div class="node azure">
+                  <strong>Browser</strong><span>www.nivbarweather.com</span>
+                </div>
+                <div class="connector"></div>
+                <div class="node azure">
+                  <strong>Azure Front Door</strong
+                  ><span>TLS וניתוב גלובלי</span>
+                </div>
+                <div class="connector"></div>
+                <div class="node">
+                  <strong>React Frontend</strong
+                  ><span>Storage Static Website</span>
+                </div>
+              </div>
+            </div>
+            <div class="lane-row">
+              <div class="lane-label">/api/*</div>
+              <div class="lane-flow">
+                <div class="node azure">
+                  <strong>Browser</strong><span>Access token מאומת</span>
+                </div>
+                <div class="connector"></div>
+                <div class="node azure">
+                  <strong>Azure Front Door</strong
+                  ><span>API אינו נשמר ב-cache</span>
+                </div>
+                <div class="connector"></div>
+                <div class="node">
+                  <strong>NestJS App Service</strong
+                  ><span>Docker, שני workers</span>
+                </div>
+                <div class="connector"></div>
+                <div class="node mint">
+                  <strong>Private PostgreSQL</strong><span>HA בין Zones</span>
+                </div>
+              </div>
+            </div>
+            <div class="support-strip">
+              <div>
+                <strong>Entra External ID</strong><span>זהות והתחברות</span>
+              </div>
+              <div>
+                <strong>OpenWeather</strong><span>ספק תחזית חיצוני</span>
+              </div>
+              <div><strong>Key Vault</strong><span>סודות בזמן ריצה</span></div>
+              <div>
+                <strong>App Insights + Logs</strong><span>ניטור ותפעול</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>Runtime architecture</span><span>04</span>
+        </div>
+      </section>
+
+      <section class="slide" data-section="04 / REQUEST FLOW">
+        <header>
+          <div class="kicker">זרימת בקשה</div>
+          <h2>מה קורה כשמשתמש מחפש עיר?</h2>
+        </header>
+        <div class="content">
+          <div class="flow">
+            <div class="node azure">
+              <strong>1. Browser</strong><span>המשתמש מחובר ושולח בקשה</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node azure">
+              <strong>2. Front Door</strong
+              ><span>/api מנותב ל-App Service</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node">
+              <strong>3. Backend</strong><span>מאמת token, scope וזהות</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node orange">
+              <strong>4. OpenWeather</strong
+              ><span>Geocoding ותחזית עדכנית</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node mint">
+              <strong>5. PostgreSQL</strong
+              ><span>שמירה רק אם נבחר יום לשמירה</span>
+            </div>
+          </div>
+          <div class="rule" style="margin: 34px 0 24px"></div>
+          <div class="four">
+            <div class="metric">
+              <span class="value">60m</span
+              ><span class="label">Cache ל-geocoding</span>
+            </div>
+            <div class="metric">
+              <span class="value">10m</span
+              ><span class="label">Cache לתחזית</span>
+            </div>
+            <div class="metric">
+              <span class="value">0</span
+              ><span class="label">מפתחות ספק חיצוני בדפדפן</span>
+            </div>
+            <div class="metric">
+              <span class="value">1 day</span
+              ><span class="label">Snapshot בכל רשומה שמורה</span>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>End-to-end request</span><span>05</span></div>
+      </section>
+
+      <section class="slide" data-section="05 / APPLICATION">
+        <header>
+          <div class="kicker">האפליקציה והמידע</div>
+          <h2>חלוקת אחריות ברורה</h2>
+        </header>
+        <div class="content three">
+          <div>
+            <h3 class="accent">React + Vite</h3>
+            <ul>
+              <li>ממשק סטטי ומהיר</li>
+              <li>MSAL להתחברות</li>
+              <li>דפדוף יום-אחר-יום</li>
+              <li>אין גישה ישירה למסד או ל-OpenWeather</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="mint">NestJS API</h3>
+            <ul>
+              <li>אימות מלא של access token</li>
+              <li>חיפוש ו-normalization</li>
+              <li>שמירה ושליפה לפי owner</li>
+              <li>Cache בזיכרון להפחתת קריאות</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="warm">PostgreSQL</h3>
+            <ul>
+              <li>תחזית נשמרת כ-snapshot קבוע</li>
+              <li>רשומות מופרדות לפי זהות מאומתת</li>
+              <li>אין שמירת סיסמה, token או email</li>
+              <li>Migration נפרד לפני גרסה חדשה</li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer">
+          <span>Application boundaries</span><span>06</span>
+        </div>
+      </section>
+
+      <section class="slide" data-section="06 / SECURITY">
+        <header>
+          <div class="kicker">Defense in depth</div>
+          <h2>אבטחה בכמה שכבות</h2>
+        </header>
+        <div class="content two">
+          <div class="step-list">
+            <div class="step">
+              <strong>Microsoft Entra External ID</strong
+              ><span
+                >Google ו-Microsoft Account, Authorization Code + PKCE</span
+              >
+            </div>
+            <div class="step">
+              <strong>אימות ב-Backend</strong
+              ><span
+                >חתימה, issuer, audience, tenant, client, expiry ו-scope</span
+              >
+            </div>
+            <div class="step">
+              <strong>Front Door בלבד</strong
+              ><span
+                >App Service חוסם ברירת מחדל ומאפשר AzureFrontDoor.Backend עם
+                X-Azure-FDID תואם</span
+              >
+            </div>
+            <div class="step">
+              <strong>רשת פרטית למסד</strong
+              ><span>VNet integration, delegated subnet ו-Private DNS</span>
+            </div>
+          </div>
+          <div class="step-list">
+            <div class="step">
+              <strong>Key Vault</strong
+              ><span>סודות נצרכים בזמן ריצה, לא נשמרים ב-Git</span>
+            </div>
+            <div class="step">
+              <strong>Managed Identity</strong
+              ><span
+                >גישה ל-Key Vault ול-ACR ללא credential קבוע באפליקציה</span
+              >
+            </div>
+            <div class="step">
+              <strong>GitHub OIDC</strong
+              ><span>CD נכנס ל-Azure ללא client secret ארוך-חיים</span>
+            </div>
+            <div class="step">
+              <strong>RBAC מצומצם</strong
+              ><span>הרשאות deployment מפוצלות לפי יעד ופעולה</span>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>Security architecture</span><span>07</span>
+        </div>
+      </section>
+
+      <section class="slide" data-section="07 / RESILIENCE">
+        <header>
+          <div class="kicker">זמינות וגדילה</div>
+          <h2>אין מכונות שמנוהלות ידנית</h2>
+          <p class="lead">
+            השירותים מנוהלים על ידי Azure. אנחנו מגדירים capacity, scaling
+            וגבולות כשל.
+          </p>
+        </header>
+        <div class="content two-wide">
+          <div
+            class="four"
+            style="grid-template-columns: repeat(2, 1fr); gap: 28px"
+          >
+            <div class="metric">
+              <span class="value">2–4</span
+              ><span class="label"
+                >App Service workers. מינימום 2, autoscale עד 4</span
+              >
+            </div>
+            <div class="metric">
+              <span class="value">2 AZ</span
+              ><span class="label"
+                >PostgreSQL primary + standby ב-Zones שונים</span
+              >
+            </div>
+            <div class="metric">
+              <span class="value">7 days</span
+              ><span class="label">תקופת גיבוי למסד הנתונים</span>
+            </div>
+            <div class="metric">
+              <span class="value">1 Region</span
+              ><span class="label">Sweden Central. אין DR אזורי מלא</span>
+            </div>
+          </div>
+          <div>
+            <div class="statement">
+              Front Door ו-App Service מספקים ניתוב ואיזון עומסים. אין ALB או
+              Load Balancer שמנוהל בנפרד.
+            </div>
+            <ul style="margin-top: 24px">
+              <li>Scale-out מעל 70% CPU במשך 5 דקות</li>
+              <li>Scale-in מתחת 30% CPU במשך 10 דקות</li>
+              <li>PostgreSQL מבצע failover לשכפול standby</li>
+              <li>Storage הוא LRS ולכן אינו פתרון Multi-Region</li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer"><span>Availability model</span><span>08</span></div>
+      </section>
+
+      <section class="slide" data-section="08 / INFRASTRUCTURE AS CODE">
+        <header>
+          <div class="kicker">Terraform</div>
+          <h2>מי מנהל מה?</h2>
+        </header>
+        <div class="content two">
+          <div>
+            <h3 class="accent">Terraform מנהל</h3>
+            <ul>
+              <li>Azure resources ורשתות</li>
+              <li>Managed identities ו-RBAC</li>
+              <li>Diagnostic settings ו-autoscale</li>
+              <li>Front Door routes ו-custom domain association</li>
+              <li>Container Apps migration job</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="warm">בעלות חיצונית או ידנית</h3>
+            <ul>
+              <li>Secrets והערכים שלהם</li>
+              <li>Namecheap DNS</li>
+              <li>Entra tenant, app registrations ו-redirect URI</li>
+              <li>GitHub Environment והפעלת Production CD</li>
+              <li>Build artifacts ו-container image של כל release</li>
+            </ul>
+          </div>
+        </div>
+        <div class="statement" style="align-self: end">
+          הפרדה מכוונת: Terraform שולט בתשתית, וה-CD שולט בגרסת האפליקציה.
+          Lifecycle ignores מצומצמים מונעים משני הכלים להילחם זה בזה.
+        </div>
+        <div class="footer">
+          <span>Ownership boundaries</span><span>09</span>
+        </div>
+      </section>
+
+      <section class="slide" data-section="09 / CI">
+        <header>
+          <div class="kicker">Continuous Integration</div>
+          <h2>כל שינוי מוכיח שהוא ראוי למיזוג</h2>
+          <p class="lead">
+            רץ ב-Pull Request, ב-push ל-main וגם ידנית. אינו מקבל הרשאות Azure
+            ואינו פורס.
+          </p>
+        </header>
+        <div class="content">
+          <div class="pipeline">
+            <div class="node azure">
+              <strong>Application checks</strong
+              ><span>npm ci, format, lint, tests, build, audit</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node">
+              <strong>Backend image</strong
+              ><span>Docker build מוכיח שה-image נבנה</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node mint">
+              <strong>Terraform checks</strong
+              ><span>fmt, init ללא backend, validate</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node azure">
+              <strong>Merge signal</strong
+              ><span>שלושה jobs בלתי תלויים וברורים</span>
+            </div>
+          </div>
+          <div class="rule" style="margin: 38px 0 22px"></div>
+          <div class="statement">
+            עקרון מרכזי: CI בודק קוד ותשתית, אבל לא משנה Production.
+          </div>
+        </div>
+        <div class="footer"><span>GitHub Actions CI</span><span>10</span></div>
+      </section>
+
+      <section class="slide" data-section="10 / CD">
+        <header>
+          <div class="kicker">Continuous Delivery</div>
+          <h2>Release ידני, עקבי ומאומת</h2>
+          <p class="lead">
+            Production משתנה רק לאחר הפעלה מכוונת של workflow מהענף main.
+          </p>
+        </header>
+        <div class="content">
+          <div class="flow">
+            <div class="node azure">
+              <strong>Authorize</strong
+              ><span>main, actor מדויק, GitHub Environment</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node">
+              <strong>OIDC Login</strong
+              ><span>Federated identity ללא secret קבוע</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node">
+              <strong>Build & Push</strong
+              ><span>Image לפי SHA, אימות digest ב-ACR</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node orange">
+              <strong>Migration Gate</strong
+              ><span>job חד-פעמי חייב להצליח</span>
+            </div>
+            <div class="connector"></div>
+            <div class="node mint">
+              <strong>Deploy & Verify</strong
+              ><span>Backend, frontend, purge, smoke tests</span>
+            </div>
+          </div>
+          <div class="three" style="margin-top: 34px">
+            <div class="metric">
+              <span class="value">Digest</span
+              ><span class="label">גרסה immutable ולא tag משתנה</span>
+            </div>
+            <div class="metric">
+              <span class="value">1</span
+              ><span class="label"
+                >release פעיל בכל רגע באמצעות concurrency</span
+              >
+            </div>
+            <div class="metric">
+              <span class="value">Rollback</span
+              ><span class="label"
+                >Best-effort ל-backend אם health check נכשל</span
+              >
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>GitHub Actions CD</span><span>11</span></div>
+      </section>
+
+      <section class="slide" data-section="11 / OBSERVABILITY">
+        <header>
+          <div class="kicker">ניטור ותפעול</div>
+          <h2>מה אנחנו רואים כשהמערכת רצה?</h2>
+        </header>
+        <div class="content two-wide">
+          <div class="layer-stack">
+            <div class="layer">
+              <strong>App Service</strong
+              ><span>HTTP logs, platform logs, metrics ו-health status</span>
+            </div>
+            <div class="layer">
+              <strong>PostgreSQL</strong
+              ><span>database metrics ו-diagnostic logs</span>
+            </div>
+            <div class="layer">
+              <strong>Front Door</strong
+              ><span>access logs, health probes ו-routing metrics</span>
+            </div>
+            <div class="layer">
+              <strong>Key Vault</strong
+              ><span>Audit events לכל גישה לסודות</span>
+            </div>
+            <div class="layer">
+              <strong>Migration Job</strong
+              ><span>הרצות, exit status ולוגים ב-Container Apps</span>
+            </div>
+          </div>
+          <div>
+            <div class="metric">
+              <span class="value">30 days</span
+              ><span class="label">Retention ב-Log Analytics</span>
+            </div>
+            <div class="metric" style="margin-top: 25px">
+              <span class="value">App Insights</span
+              ><span class="label"
+                >Workspace-based resource וחיבור לאפליקציה</span
+              >
+            </div>
+            <div class="statement" style="margin-top: 30px">
+              הגבול הנוכחי: אין עדיין alert destination מלא ואין instrumentation
+              עשיר מותאם-אפליקציה.
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>Monitoring baseline</span><span>12</span>
+        </div>
+      </section>
+
+      <section class="slide" data-section="12 / COST">
+        <header>
+          <div class="kicker">אומדן Pay-As-You-Go</div>
+          <h2>
+            עלות צפויה:
+            <span class="warm"><bdi dir="ltr">$445–460</bdi> לחודש</span>
+          </h2>
+          <p class="lead">
+            אומדן ציבורי ל-Sweden Central לפני מס, הנחות או credits.
+          </p>
+        </header>
+        <div class="content two-wide">
+          <table class="table" aria-label="פירוט עלויות חודשי">
+            <thead>
+              <tr>
+                <th>רכיב</th>
+                <th class="num">עלות חודשית</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>App Service, שני P0v3</td>
+                <td class="num">$129.94</td>
+              </tr>
+              <tr>
+                <td>PostgreSQL compute, primary + standby</td>
+                <td class="num">$262.10</td>
+              </tr>
+              <tr>
+                <td>PostgreSQL storage</td>
+                <td class="num">$8.76</td>
+              </tr>
+              <tr>
+                <td>Front Door Standard base</td>
+                <td class="num">$35.00</td>
+              </tr>
+              <tr>
+                <td>ACR Basic</td>
+                <td class="num">$5.06</td>
+              </tr>
+              <tr>
+                <td>Logs, traffic ושירותים משתנים</td>
+                <td class="num">$2–18</td>
+              </tr>
+              <tr class="total">
+                <td>סה״כ צפוי</td>
+                <td class="num">$445–460</td>
+              </tr>
+            </tbody>
+          </table>
+          <div>
+            <h3 style="margin-bottom: 20px">השוואת ליבת העלות לפי Region</h3>
+            <div class="bars">
+              <div class="bar-row">
+                <span class="bar-name">Sweden Central</span>
+                <div class="bar-track">
+                  <div class="bar-fill" style="--w: 92.8%"></div>
+                </div>
+                <span class="bar-price">$440.87</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-name">North Europe</span>
+                <div class="bar-track">
+                  <div class="bar-fill" style="--w: 94%"></div>
+                </div>
+                <span class="bar-price">$446.74</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-name">West Europe</span>
+                <div class="bar-track">
+                  <div class="bar-fill" style="--w: 100%"></div>
+                </div>
+                <span class="bar-price">$475.15</span>
+              </div>
+            </div>
+            <div class="statement" style="margin-top: 42px">
+              רוב העלות קונה שרידות: שני workers ו-PostgreSQL עם standby בין
+              Zones.
+            </div>
+            <p class="small" style="margin-top: 18px">
+              ללא HA במסד: חיסכון של כ-$135 לחודש. Worker יחיד: חיסכון של כ-$65,
+              במחיר פגיעה בשרידות.
+            </p>
+          </div>
+        </div>
+        <div class="footer"><span>Monthly cost model</span><span>13</span></div>
+      </section>
+
+      <section class="slide" data-section="13 / TRADE-OFFS">
+        <header>
+          <div class="kicker">החלטות ארכיטקטוניות</div>
+          <h2>מה בחרנו, ולמה?</h2>
+        </header>
+        <div class="content two">
+          <div>
+            <div class="decision">
+              <strong>PaaS במקום VMs או AKS</strong
+              ><span>פחות תחזוקה, patching ותפעול עבור צוות קטן</span>
+            </div>
+            <div class="decision">
+              <strong>Front Door Standard</strong
+              ><span
+                >Routing, TLS ודומיין מותאם בעלות נמוכה מ-Premium + Private Link
+                + WAF</span
+              >
+            </div>
+            <div class="decision">
+              <strong>PostgreSQL HA ב-Zones</strong
+              ><span>שרידות לתקלת Zone ללא מורכבות Multi-Region</span>
+            </div>
+            <div class="decision">
+              <strong>ACR Basic</strong
+              ><span
+                >מספיק לנפח הפרויקט, Premium נשמר כאופציית Private
+                Endpoint</span
+              >
+            </div>
+          </div>
+          <div>
+            <div class="decision">
+              <strong>CD ידני</strong
+              ><span
+                >בקרה אנושית על Production במקום פריסה אוטומטית מכל push</span
+              >
+            </div>
+            <div class="decision">
+              <strong>Migration job נפרד</strong
+              ><span>מונע race בין 2–4 מופעי האפליקציה</span>
+            </div>
+            <div class="decision">
+              <strong>Cache בזיכרון</strong
+              ><span>פשוט וזול, אך אינו משותף בין workers כמו Redis</span>
+            </div>
+            <div class="decision">
+              <strong>Single Region</strong
+              ><span
+                >פשרה מודעת: זמינות אזורית טובה, ללא התאוששות מאסון אזורי
+                מלא</span
+              >
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>Architecture rationale</span><span>14</span>
+        </div>
+      </section>
+
+      <section class="slide" data-section="14 / AI WORKFLOW">
+        <header>
+          <div class="kicker">Human-in-the-loop</div>
+          <h2>שיטת העבודה עם AI</h2>
+          <p class="lead">
+            AI שימש כשותף הנדסי מתועד. האדם נשאר בעל הסמכות על סודות, תשתית חיה
+            ו-Production.
+          </p>
+        </header>
+        <div class="content two-wide">
+          <div class="step-list">
+            <div class="step">
+              <strong>הגדרת משימה וגבולות</strong
+              ><span>מטרה, קבצים מותרים, פעולות אסורות וסודיות</span>
+            </div>
+            <div class="step">
+              <strong>שינוי קטן וממוקד</strong
+              ><span>Interaction ממוספר לכל החלטה או תיקון</span>
+            </div>
+            <div class="step">
+              <strong>Validation אוטומטי</strong
+              ><span
+                >format, lint, tests, build, Terraform validate ו-diff
+                checks</span
+              >
+            </div>
+            <div class="step">
+              <strong>Human review</strong
+              ><span>בדיקת התוצאה, plan, rollout והתנהגות Production</span>
+            </div>
+            <div class="step">
+              <strong>תיעוד והפקת לקחים</strong
+              ><span>prompt, response, שינויים, אבטחה, הנחות וסטטוס סופי</span>
+            </div>
+          </div>
+          <div>
+            <h3 class="accent">דוגמאות לתיקונים שה-AI עזר לזהות</h3>
+            <ul>
+              <li>OIDC subject עבר לזהויות GitHub immutable</li>
+              <li>שם migration job קוצר למגבלת Azure</li>
+              <li>validation לסיסמת PostgreSQL תואם למציאות</li>
+              <li>tag drift של Azure טופל ב-lifecycle ממוקד</li>
+              <li>הדומיין החדש נפרס בשני שלבים מבוקרים</li>
+            </ul>
+            <div class="statement" style="margin-top: 32px">
+              העיקרון: AI מציע ומבצע עבודה תחומה. CI, Terraform plan והאדם
+              מוכיחים שהתוצאה נכונה.
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>AI-assisted engineering</span><span>15</span>
+        </div>
+      </section>
+
+      <section class="slide title-slide" data-section="15 / RESULT">
+        <div class="hero">
+          <div class="kicker">התוצאה</div>
+          <h1>מערכת חיה, לא רק תרשים</h1>
+          <div class="title-line"></div>
+          <p class="lead">
+            דומיין מותאם, התחברות, תחזית, שמירה מבודדת למשתמש, תשתית כקוד ותהליך
+            CI/CD שהוכח ב-Production.
+          </p>
+          <div class="three" style="margin-top: 42px; max-width: 920px">
+            <div class="metric">
+              <span class="value">www</span
+              ><span class="label">nivbarweather.com</span>
+            </div>
+            <div class="metric">
+              <span class="value">IaC</span
+              ><span class="label">Terraform + remote state</span>
+            </div>
+            <div class="metric">
+              <span class="value">CI/CD</span
+              ><span class="label">GitHub Actions + OIDC</span>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>Azure Weather</span><span>16</span></div>
+      </section>
+    </main>
+
+    <div class="counter" id="counter" aria-live="polite">01 / 16</div>
+    <div class="controls" aria-label="ניווט במצגת">
+      <button id="prev" aria-label="שקף קודם">‹</button>
+      <button id="next" aria-label="שקף הבא">›</button>
+    </div>
+    <div class="progress" id="progress"></div>
+
+    <script>
+      (() => {
+        const slides = [...document.querySelectorAll(".slide")];
+        const counter = document.getElementById("counter");
+        const progress = document.getElementById("progress");
+        let index = Math.max(
+          0,
+          Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0),
+        );
+
+        function show(nextIndex) {
+          index = (nextIndex + slides.length) % slides.length;
+          slides.forEach((slide, i) =>
+            slide.classList.toggle("active", i === index),
+          );
+          counter.textContent = `${String(index + 1).padStart(2, "0")} / ${String(slides.length).padStart(2, "0")}`;
+          progress.style.setProperty(
+            "--progress",
+            `${((index + 1) / slides.length) * 100}%`,
+          );
+          history.replaceState(null, "", `#${index + 1}`);
+        }
+
+        document
+          .getElementById("next")
+          .addEventListener("click", () => show(index + 1));
+        document
+          .getElementById("prev")
+          .addEventListener("click", () => show(index - 1));
+        window.addEventListener("keydown", (event) => {
+          if (["ArrowRight", "PageDown", " ", "Enter"].includes(event.key)) {
+            event.preventDefault();
+            show(index + 1);
+          }
+          if (["ArrowLeft", "PageUp", "Backspace"].includes(event.key)) {
+            event.preventDefault();
+            show(index - 1);
+          }
+          if (event.key === "Home") show(0);
+          if (event.key === "End") show(slides.length - 1);
+        });
+        window.addEventListener("hashchange", () => {
+          const requested = Number(location.hash.slice(1));
+          if (
+            Number.isInteger(requested) &&
+            requested >= 1 &&
+            requested <= slides.length
+          )
+            show(requested - 1);
+        });
+        show(index);
+      })();
+    </script>
+  </body>
 </html>
